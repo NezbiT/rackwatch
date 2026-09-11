@@ -1,0 +1,25 @@
+# RackWatch runtime dependencies.
+# Pin minors so CasaOS / Compose rebuilds stay reproducible.
+# Dev extras (pytest) are listed at the bottom and are optional in the image.
+
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+jinja2==3.1.6
+python-multipart==0.0.20
+pydantic==2.11.3
+pydantic-settings==2.8.1
+httpx==0.28.1
+sqlalchemy==2.0.40
+aiosqlite==0.21.0
+greenlet==3.1.1
+docker==7.1.0
+psutil==7.0.0
+paho-mqtt==2.1.0
+prometheus-client==0.21.1
+itsdangerous==2.2.0
+orjson==3.10.16
+
+# tests (installed in CI / local venv, not required at runtime)
+pytest==8.3.5
+pytest-asyncio==0.26.0
+httpx==0.28.1

@@ -1,0 +1,118 @@
+{
+  "name": "RackWatch diagnose",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rackwatch-diagnose",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-in",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "rackwatch-diagnose"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://10.13.58.100:8180/api/v1/snapshot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "X-API-Key", "value": "={{ $env.RACKWATCH_API_TOKEN }}"}]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "snap",
+      "name": "RackWatch snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $('Webhook').item.json.body || $('Webhook').item.json;\nconst snap = $json;\nconst name = alert.service || alert.container || '';\nconst bad = (snap.containers || []).filter(c => c.severity !== 'ok');\nreturn [{ json: { alert, service: name, down: bad, summary: snap.summary } }];"
+      },
+      "id": "prep",
+      "name": "Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://10.13.58.100:8180/api/v1/containers/{{ $json.service }}/logs?lines=80",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "X-API-Key", "value": "={{ $env.RACKWATCH_API_TOKEN }}"}]
+        },
+        "options": { "timeout": 15000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "logs",
+      "name": "Container logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_URL || 'http://10.13.58.110:11434' }}/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen2.5:3b-instruct\",\n  \"stream\": false,\n  \"options\": { \"num_predict\": 280, \"temperature\": 0.2 },\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"Eres un operador de homelab. Diagnostica en español, breve. No inventes. Si ves EADDRINUSE o dos contenedores iguales, dilo. No pidas restart automático.\" },\n    { \"role\": \"user\", \"content\": {{ JSON.stringify('Alerta: ' + JSON.stringify($('Prep').item.json.alert) + '\\nDown/warn: ' + JSON.stringify($('Prep').item.json.down) + '\\nLogs:\\n' + (($json.logs || $json.detail || '').toString().slice(-4000))) }} }\n  ]\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "llm",
+      "name": "Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://10.13.58.100:8180/api/v1/hooks/alert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $env.RACKWATCH_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"title\": \"LLM: {{ $('Prep').item.json.service || 'rack' }}\",\n  \"message\": {{ JSON.stringify(($json.message && $json.message.content) || JSON.stringify($json)) }},\n  \"severity\": \"info\",\n  \"source\": \"n8n-llm\",\n  \"host\": \"casaos\",\n  \"service\": {{ JSON.stringify($('Prep').item.json.service || 'rackwatch') }}\n}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "write",
+      "name": "Write RackWatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, wrote: $json } }}"
+      },
+      "id": "resp",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "RackWatch snapshot", "type": "main", "index": 0 }]] },
+    "RackWatch snapshot": { "main": [[{ "node": "Prep", "type": "main", "index": 0 }]] },
+    "Prep": { "main": [[{ "node": "Container logs", "type": "main", "index": 0 }]] },
+    "Container logs": { "main": [[{ "node": "Ollama", "type": "main", "index": 0 }]] },
+    "Ollama": { "main": [[{ "node": "Write RackWatch", "type": "main", "index": 0 }]] },
+    "Write RackWatch": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

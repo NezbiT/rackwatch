@@ -1,0 +1,41 @@
+{% set rows = snapshot.containers if snapshot else [] %}
+{% if not rows %}
+<div class="rw-empty">
+  <strong>{{ t('empty.containers_first') }}</strong>
+  <p>{{ t('empty.containers_first_body') }}</p>
+</div>
+{% else %}
+<div class="rw-table-wrap">
+  <table class="rw-table">
+    <thead>
+      <tr>
+        <th scope="col">{{ t('table.status') }}</th>
+        <th scope="col">{{ t('table.name') }}</th>
+        <th scope="col">{{ t('table.image') }}</th>
+        <th scope="col">{{ t('table.cpu') }}</th>
+        <th scope="col">{{ t('table.ram') }}</th>
+        <th scope="col"><span class="visually-hidden">{{ t('table.actions') }}</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in rows %}
+      <tr class="is-{{ c.severity }}" data-name="{{ c.name }}">
+        <td><span class="rw-pill is-{{ c.severity }}">{{ c.status }}{% if c.health %} · {{ c.health }}{% endif %}</span></td>
+        <td class="mono">{{ c.name }}</td>
+        <td class="rw-ellipsis">{{ c.image }}</td>
+        <td class="mono">{{ '%.1f'|format(c.cpu_percent) + '%' if c.cpu_percent is not none else '—' }}</td>
+        <td class="mono">{{ '%.0f'|format(c.memory_percent) + '%' if c.memory_percent is not none else '—' }}</td>
+        <td>
+          <button
+            class="outline secondary rw-tiny"
+            type="button"
+            data-restart="{{ c.name }}">
+            {{ t('action.restart') }}
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

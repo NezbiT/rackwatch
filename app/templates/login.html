@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ t('login.title') }}{% endblock %}
+{% block content %}
+<section class="rw-auth">
+  <article class="rw-card rw-auth-card">
+    <header>
+      <h1>{{ t('login.heading') }}</h1>
+      <p>{{ t('login.lede') }}</p>
+    </header>
+
+    {% if error %}
+    <p class="rw-banner is-error" role="alert">{{ error }}</p>
+    {% endif %}
+
+    <form method="post" action="/login" class="rw-form">
+      <input type="hidden" name="next" value="{{ next }}">
+      <label>
+        {{ t('login.user') }}
+        <input type="text" name="username" autocomplete="username" required autofocus>
+      </label>
+      <label>
+        {{ t('login.password') }}
+        <input type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit">{{ t('login.submit') }}</button>
+    </form>
+  </article>
+</section>
+{% endblock %}

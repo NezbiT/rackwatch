@@ -1,0 +1,42 @@
+# RackWatch — ignore build artifacts, secrets, and local data.
+# Keep .env.example tracked. Never commit real tokens.
+
+.env
+.env.local
+*.env
+!.env.example
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Exporter / Grafana local volumes
+prometheus/data/
+grafana/data/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+logs/

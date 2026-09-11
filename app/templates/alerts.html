@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ t('alerts.title') }}{% endblock %}
+{% block content %}
+<section class="rw-page">
+  <header class="rw-page-head">
+    <div>
+      <h1>{{ t('alerts.title') }}</h1>
+      <p class="rw-lede">{{ t('alerts.lede') }}</p>
+    </div>
+    <form class="rw-inline" method="get" action="/alerts">
+      <label>
+        {{ t('filter.range') }}
+        <select name="range" onchange="this.form.submit()">
+          {% for value, key in [('15m','range.15m'),('1h','range.1h'),('6h','range.6h'),('24h','range.24h'),('7d','range.7d')] %}
+          <option value="{{ value }}" {% if time_range == value %}selected{% endif %}>{{ t(key) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+  </header>
+
+  <section class="rw-card" aria-labelledby="alerts-heading">
+    <header class="rw-card-head">
+      <h2 id="alerts-heading">{{ t('alerts.history') }}</h2>
+    </header>
+    {% if not alerts %}
+    <div class="rw-empty">
+      <strong>{{ t('empty.alerts_title') }}</strong>
+      <p>{{ t('empty.alerts_body') }}</p>
+      <a href="/settings">{{ t('empty.open_settings') }}</a>
+    </div>
+    {% else %}
+    <div class="rw-table-wrap">
+      <table class="rw-table">
+        <thead>
+          <tr>
+            <th>{{ t('table.when') }}</th>
+            <th>{{ t('table.severity') }}</th>
+            <th>{{ t('table.title') }}</th>
+            <th>{{ t('table.source') }}</th>
+            <th>{{ t('table.delivered') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in alerts %}
+          <tr class="is-{{ 'error' if a.severity == 'critical' else a.severity }}">
+            <td class="mono">{{ a.created_at }}</td>
+            <td><span class="rw-pill is-{{ 'error' if a.severity == 'critical' else a.severity }}">{{ t('status.' + a.severity) if a.severity in ['info','warning','critical'] else a.severity }}</span></td>
+            <td>
+              <strong>{{ a.title }}</strong>
+              {% if a.message %}<p class="rw-muted">{{ a.message }}</p>{% endif %}
+            </td>
+            <td>{{ a.host }} / {{ a.service }}</td>
+            <td class="rw-muted">{{ a.delivered_to or t('alerts.local_only') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}

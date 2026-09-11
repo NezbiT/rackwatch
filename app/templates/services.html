@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ t('svc.title') }}{% endblock %}
+{% block content %}
+<section class="rw-page">
+  <header class="rw-page-head">
+    <div>
+      <h1>{{ t('svc.title') }}</h1>
+      <p class="rw-lede">{{ t('svc.lede') }}</p>
+    </div>
+  </header>
+
+  <form class="rw-filters" id="filter-form" aria-label="{{ t('svc.filters') }}">
+    <label>
+      {{ t('filter.service') }}
+      <input type="search" name="service" id="filter-service" placeholder="{{ t('filter.service_ph') }}" autocomplete="off">
+    </label>
+    <label>
+      {{ t('filter.status') }}
+      <select name="status" id="filter-status">
+        <option value="">{{ t('filter.any_status') }}</option>
+        <option value="ok">{{ t('status.ok') }}</option>
+        <option value="warning">{{ t('status.warning') }}</option>
+        <option value="error">{{ t('status.error') }}</option>
+      </select>
+    </label>
+    <input type="hidden" name="host" id="filter-host" value="">
+    <input type="hidden" name="severity" id="filter-severity" value="">
+    <input type="hidden" name="time_range" id="filter-range" value="1h">
+    <button type="button" class="secondary outline" id="filter-reset">{{ t('filter.reset') }}</button>
+  </form>
+
+  <section class="rw-card" aria-labelledby="svc-heading">
+    <header class="rw-card-head">
+      <h2 id="svc-heading">{{ t('dash.containers') }}</h2>
+      <p class="rw-muted" id="container-count"></p>
+    </header>
+    <div id="container-table">
+      {% include "partials/container_table.html" %}
+    </div>
+  </section>
+
+  <section class="rw-card" aria-labelledby="restart-heading">
+    <header class="rw-card-head">
+      <h2 id="restart-heading">{{ t('svc.restarts') }}</h2>
+    </header>
+    {% if not restarts %}
+    <div class="rw-empty">
+      <p>{{ t('empty.restarts') }}</p>
+    </div>
+    {% else %}
+    <div class="rw-table-wrap">
+      <table class="rw-table">
+        <thead>
+          <tr>
+            <th>{{ t('table.when') }}</th>
+            <th>{{ t('table.container') }}</th>
+            <th>{{ t('table.reason') }}</th>
+            <th>{{ t('table.result') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in restarts %}
+          <tr>
+            <td class="mono">{{ r.created_at }}</td>
+            <td class="mono">{{ r.container }}</td>
+            <td>{{ r.reason }}{% if r.automatic %} <span class="rw-muted">{{ t('action.auto') }}</span>{% endif %}</td>
+            <td>
+              <span class="rw-pill is-{{ 'ok' if r.success else 'error' }}">{{ t('result.ok') if r.success else t('result.failed') }}</span>
+              {% if r.error %}<span class="rw-muted"> {{ r.error }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}

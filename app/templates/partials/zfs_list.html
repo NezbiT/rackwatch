@@ -1,0 +1,16 @@
+{% set pools = snapshot.zfs if snapshot else [] %}
+{% if not pools %}
+<div class="rw-empty rw-empty-tight">
+  <p>{{ t('empty.zfs') }}</p>
+</div>
+{% else %}
+<ul class="rw-plain">
+  {% for z in pools %}
+  <li class="rw-row">
+    <span class="rw-pill is-{{ z.status }}">{{ z.health }}</span>
+    <strong>{{ z.name }}</strong>
+    <span class="mono rw-muted">{% if z.capacity_percent is not none %}{{ t('count.used', pct='%.0f'|format(z.capacity_percent) + '%') }}{% else %}{{ z.source }}{% endif %}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

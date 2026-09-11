@@ -1,0 +1,35 @@
+{% set hosts = snapshot.hosts if snapshot else [] %}
+{% if not hosts %}
+  <article class="rw-skel-row" aria-hidden="true">
+    <div class="rw-skel"></div><div class="rw-skel"></div>
+    <div class="rw-skel"></div>
+  </article>
+  <p class="rw-empty" id="metrics-empty">{{ t('live.connecting') }}</p>
+{% else %}
+  {% for h in hosts %}
+  <article class="rw-gauge is-{{ h.status }}" data-host="{{ h.name }}">
+    <header>
+      <span class="rw-pill is-{{ h.status }}">{{ t('status.' + h.status) if h.status in ['ok','warning','error','unknown'] else h.status }}</span>
+      <h3>{{ h.name }}</h3>
+    </header>
+    <dl>
+      <div>
+        <dt>{{ t('metric.cpu') }}</dt>
+        <dd class="mono">{{ '%.0f'|format(h.cpu_percent) if h.cpu_percent is not none else '—' }}%</dd>
+        <div class="rw-meter" aria-hidden="true"><span style="width: {{ h.cpu_percent or 0 }}%"></span></div>
+      </div>
+      <div>
+        <dt>{{ t('metric.ram') }}</dt>
+        <dd class="mono">{{ '%.0f'|format(h.ram_percent) if h.ram_percent is not none else '—' }}%</dd>
+        <div class="rw-meter" aria-hidden="true"><span style="width: {{ h.ram_percent or 0 }}%"></span></div>
+      </div>
+      <div>
+        <dt>{{ t('metric.disk') }}</dt>
+        <dd class="mono">{{ '%.0f'|format(h.disk_percent) if h.disk_percent is not none else '—' }}%</dd>
+        <div class="rw-meter" aria-hidden="true"><span style="width: {{ h.disk_percent or 0 }}%"></span></div>
+      </div>
+    </dl>
+    <p class="rw-muted">{{ t('metric.source', source=h.source) }}</p>
+  </article>
+  {% endfor %}
+{% endif %}

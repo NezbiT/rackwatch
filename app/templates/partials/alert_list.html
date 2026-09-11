@@ -1,0 +1,18 @@
+{% set alerts = snapshot.alerts if snapshot else [] %}
+{% if not alerts %}
+<div class="rw-empty rw-empty-tight">
+  <p>{{ t('empty.alerts') }}</p>
+</div>
+{% else %}
+<ul class="rw-plain">
+  {% for a in alerts[:8] %}
+  <li class="rw-alert is-{{ a.severity }}">
+    <span class="rw-pill is-{{ 'error' if a.severity == 'critical' else a.severity }}">{{ t('status.' + a.severity) if a.severity in ['info','warning','critical'] else a.severity }}</span>
+    <div>
+      <strong>{{ a.title }}</strong>
+      <p class="rw-muted">{{ a.host }} · {{ a.service }}</p>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

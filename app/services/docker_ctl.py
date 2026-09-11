@@ -1,0 +1,182 @@
+"""Docker Engine adapter.
+
+Uses the official Docker SDK against DOCKER_HOST (the socket is
+mounted read-write in Compose so we can restart). All SDK calls are
+blocking, so they run in a thread via `asyncio.to_thread`.
+
+Restart is denylisted for core stack names (see AUTO_RESTART_DENYLIST)
+even when an operator clicks "Restart" — those names require an
+explicit override query param used only from the Services page
+confirm dialog (`force=1`).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import sys
+import time
+from typing import Any
+
+from app.config import Settings
+from app.schemas import ContainerMetrics
+from app.services.status import container_severity
+
+log = logging.getLogger("rackwatch.docker")
+
+
+class DockerControl:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self._client = None
+        self._fail_until = 0.0
+
+    def _base_url(self) -> str:
+        host = self.settings.docker_host
+        # Compose sets unix://… which does not exist on Windows. Docker Desktop
+        # exposes a named pipe instead.
+        if sys.platform == "win32" and host.startswith("unix://"):
+            return "npipe:////./pipe/docker_engine"
+        return host
+
+    def _connect(self) -> Any:
+        if self._client is not None:
+            return self._client
+        now = time.time()
+        if now < self._fail_until:
+            return None
+        try:
+            import docker
+
+            # 2s timeout so a missing socket cannot stall the 3s collector tick.
+            self._client = docker.DockerClient(base_url=self._base_url(), timeout=2)
+            self._client.ping()
+            return self._client
+        except Exception as exc:
+            log.warning("docker unavailable: %s", exc)
+            self._client = None
+            self._fail_until = now + 15
+            return None
+
+    async def ready(self) -> bool:
+        client = await asyncio.to_thread(self._connect)
+        return client is not None
+
+    async def list_containers(self, usage: dict[str, dict[str, float]] | None = None) -> list[ContainerMetrics]:
+        return await asyncio.to_thread(self._list_sync, usage or {})
+
+    def _list_sync(self, usage: dict[str, dict[str, float]]) -> list[ContainerMetrics]:
+        client = self._connect()
+        if client is None:
+            return []
+        out: list[ContainerMetrics] = []
+        try:
+            for c in client.containers.list(all=True):
+                labels = c.labels or {}
+                name = (c.name or "").lstrip("/")
+                health = ""
+                state = c.attrs.get("State") or {}
+                if "Health" in state:
+                    health = (state["Health"] or {}).get("Status") or ""
+                started = state.get("StartedAt") or ""
+                stats = usage.get(name, {})
+                item = ContainerMetrics(
+                    id=c.short_id,
+                    name=name,
+                    image=_image_name(c),
+                    status=(c.status or "").lower(),
+                    health=health,
+                    cpu_percent=stats.get("cpu"),
+                    memory_percent=stats.get("memory_percent"),
+                    memory_bytes=int(stats["memory_bytes"]) if "memory_bytes" in stats else None,
+                    restart_count=int(state.get("RestartCount") or 0),
+                    started_at=started,
+                    compose_project=labels.get("com.docker.compose.project", ""),
+                    host=self.settings.instance_name,
+                )
+                item.severity = container_severity(item.status, item.health)
+                out.append(item)
+        except Exception as exc:
+            log.warning("docker list failed: %s", exc)
+            self._client = None
+        return sorted(out, key=lambda x: (x.severity != "error", x.name))
+
+    async def logs(self, name_or_id: str, lines: int = 80) -> tuple[bool, str]:
+        return await asyncio.to_thread(self._logs_sync, name_or_id, lines)
+
+    def _logs_sync(self, name_or_id: str, lines: int) -> tuple[bool, str]:
+        client = self._connect()
+        if client is None:
+            return False, "Docker engine is not reachable"
+        try:
+            container = client.containers.get(name_or_id)
+            raw = container.logs(tail=max(1, min(lines, 500)), timestamps=True)
+            text = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)
+            return True, text[-32000:]
+        except Exception as exc:
+            return False, str(exc)
+
+    async def restart(self, name_or_id: str, *, force: bool = False) -> tuple[bool, str]:
+        return await asyncio.to_thread(self._action_sync, name_or_id, force, "restart")
+
+    async def start(self, name_or_id: str, *, force: bool = False) -> tuple[bool, str]:
+        return await asyncio.to_thread(self._action_sync, name_or_id, force, "start")
+
+    async def stop(self, name_or_id: str, *, force: bool = False) -> tuple[bool, str]:
+        return await asyncio.to_thread(self._action_sync, name_or_id, force, "stop")
+
+    def _guard(self, name_or_id: str, force: bool) -> str:
+        if not force and self.is_denied(name_or_id):
+            return f"{name_or_id} is on the restart denylist"
+        if not force and self.allowlist_blocks(name_or_id):
+            return f"{name_or_id} is not on the restart allow-list"
+        return ""
+
+    def _action_sync(self, name_or_id: str, force: bool, action: str) -> tuple[bool, str]:
+        blocked = self._guard(name_or_id, force)
+        if blocked:
+            return False, blocked
+        client = self._connect()
+        if client is None:
+            return False, "Docker engine is not reachable"
+        try:
+            container = client.containers.get(name_or_id)
+            if action == "start":
+                container.start()
+                return True, "started"
+            if action == "stop":
+                container.stop(timeout=20)
+                return True, "stopped"
+            container.restart(timeout=20)
+            return True, "restarted"
+        except Exception as exc:
+            return False, str(exc)
+
+    def is_denied(self, name: str) -> bool:
+        lowered = name.lower()
+        return any(token and token in lowered for token in self.settings.denylist)
+
+    def allowlist_blocks(self, name: str) -> bool:
+        allow = self.settings.allowlist
+        if not allow:
+            return False
+        lowered = name.lower()
+        return not any(token and token in lowered for token in allow)
+
+    def close(self) -> None:
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception:
+                pass
+            self._client = None
+
+
+def _image_name(container: Any) -> str:
+    try:
+        tags = container.image.tags
+        if tags:
+            return tags[0]
+    except Exception:
+        pass
+    return (container.attrs.get("Config") or {}).get("Image", "")

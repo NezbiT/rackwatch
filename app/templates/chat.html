@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ t('chat.page_title') }}{% endblock %}
+{% block content %}
+<section class="rw-page">
+  <header class="rw-page-head">
+    <div>
+      <h1>{{ t('chat.page_title') }}</h1>
+      <p class="rw-lede">{{ t('chat.lede') }}</p>
+    </div>
+  </header>
+
+  {% if n8n_chat %}
+  <div id="n8n-chat-full" class="rw-n8n-full" aria-label="{{ t('nav.chat') }}"></div>
+  {% else %}
+  <div class="rw-card rw-empty">
+    <strong>{{ t('chat.setup_title') }}</strong>
+    <p>{{ t('chat.setup_body') }}</p>
+    <a href="/settings#n8n-chat">{{ t('chat.cta') }}</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

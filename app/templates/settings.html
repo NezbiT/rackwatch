@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}{{ t('settings.title') }}{% endblock %}
+{% block content %}
+<section class="rw-page rw-page-narrow">
+  <header class="rw-page-head">
+    <div>
+      <h1>{{ t('settings.title') }}</h1>
+      <p class="rw-lede">{{ t('settings.lede') }}</p>
+    </div>
+  </header>
+
+  {% if saved %}
+  <p class="rw-banner is-ok" role="status">{{ t('settings.saved') }}</p>
+  {% endif %}
+
+  <form method="post" action="/settings" class="rw-form rw-settings">
+    <fieldset>
+      <legend>{{ t('settings.instance') }}</legend>
+      <label>
+        {{ t('settings.instance_name') }}
+        <input type="text" name="instance_name" value="{{ settings.instance_name }}" maxlength="64">
+      </label>
+      <label>
+        {{ t('settings.refresh') }}
+        <input type="number" name="refresh_seconds" min="1" max="30" value="{{ settings.refresh_seconds }}">
+      </label>
+      <label>
+        {{ t('settings.grafana_url') }}
+        <input type="url" name="grafana_public_url" value="{{ settings.grafana_public_url }}" placeholder="http://192.168.1.10:3001">
+        <small>{{ t('settings.grafana_url_help') }}</small>
+      </label>
+      <label>
+        {{ t('settings.grafana_uid') }}
+        <input type="text" name="grafana_dashboard_uid" value="{{ settings.grafana_dashboard_uid }}">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ t('settings.thresholds') }}</legend>
+      <div class="rw-pair">
+        <label>{{ t('settings.cpu_warn') }} <input type="number" name="threshold_cpu_warn" min="1" max="100" step="1" value="{{ settings.threshold_cpu_warn }}"></label>
+        <label>{{ t('settings.cpu_crit') }} <input type="number" name="threshold_cpu_crit" min="1" max="100" step="1" value="{{ settings.threshold_cpu_crit }}"></label>
+      </div>
+      <div class="rw-pair">
+        <label>{{ t('settings.ram_warn') }} <input type="number" name="threshold_ram_warn" min="1" max="100" step="1" value="{{ settings.threshold_ram_warn }}"></label>
+        <label>{{ t('settings.ram_crit') }} <input type="number" name="threshold_ram_crit" min="1" max="100" step="1" value="{{ settings.threshold_ram_crit }}"></label>
+      </div>
+      <div class="rw-pair">
+        <label>{{ t('settings.disk_warn') }} <input type="number" name="threshold_disk_warn" min="1" max="100" step="1" value="{{ settings.threshold_disk_warn }}"></label>
+        <label>{{ t('settings.disk_crit') }} <input type="number" name="threshold_disk_crit" min="1" max="100" step="1" value="{{ settings.threshold_disk_crit }}"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ t('settings.autorestart') }}</legend>
+      <label class="rw-check">
+        <input type="checkbox" name="auto_restart_enabled" {% if settings.auto_restart_enabled %}checked{% endif %}>
+        {{ t('settings.autorestart_on') }}
+      </label>
+      <label>
+        {{ t('settings.delay') }}
+        <input type="number" name="auto_restart_delay_seconds" min="0" max="300" value="{{ settings.auto_restart_delay_seconds }}">
+      </label>
+      <label>
+        {{ t('settings.cooldown') }}
+        <input type="number" name="auto_restart_cooldown_seconds" min="10" max="3600" value="{{ settings.auto_restart_cooldown_seconds }}">
+      </label>
+      <label>
+        {{ t('settings.max_hour') }}
+        <input type="number" name="auto_restart_max_per_hour" min="1" max="20" value="{{ settings.auto_restart_max_per_hour }}">
+      </label>
+      <label>
+        {{ t('settings.deny') }}
+        <input type="text" name="auto_restart_denylist" value="{{ settings.auto_restart_denylist }}">
+        <small>{{ t('settings.deny_help') }}</small>
+      </label>
+      <label>
+        {{ t('settings.allow') }}
+        <input type="text" name="auto_restart_allowlist" value="{{ settings.auto_restart_allowlist }}" placeholder="{{ t('settings.allow_ph') }}">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ t('settings.telegram') }}</legend>
+      <label>
+        {{ t('settings.bot_token') }}
+        <input type="password" name="telegram_bot_token" value="{{ settings.telegram_bot_token }}" autocomplete="off">
+      </label>
+      <label>
+        {{ t('settings.chat_id') }}
+        <input type="text" name="telegram_chat_id" value="{{ settings.telegram_chat_id }}">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ t('settings.whatsapp') }}</legend>
+      <p class="rw-muted">{{ t('settings.whatsapp_help') }}</p>
+      <label>
+        {{ t('settings.phone') }}
+        <input type="text" name="whatsapp_phone" value="{{ settings.whatsapp_phone }}" placeholder="34600111222">
+      </label>
+      <label>
+        {{ t('settings.apikey') }}
+        <input type="password" name="whatsapp_apikey" value="{{ settings.whatsapp_apikey }}" autocomplete="off">
+      </label>
+      <label>
+        {{ t('settings.or_webhook') }}
+        <input type="url" name="whatsapp_webhook_url" value="{{ settings.whatsapp_webhook_url }}">
+      </label>
+    </fieldset>
+
+    <fieldset id="n8n-chat">
+      <legend>{{ t('settings.n8n') }}</legend>
+      <label>
+        {{ t('settings.n8n_url') }}
+        <input type="url" name="n8n_webhook_url" value="{{ settings.n8n_webhook_url }}" placeholder="https://n8n.example/webhook/rackwatch">
+      </label>
+      <label>
+        {{ t('settings.n8n_chat_url') }}
+        <input type="url" name="n8n_chat_webhook_url" value="{{ settings.n8n_chat_webhook_url }}" placeholder="https://n8n.example/webhook/chat">
+        <small>{{ t('settings.n8n_chat_help') }}</small>
+      </label>
+      <label>
+        {{ t('settings.n8n_chat_auth') }}
+        <input type="password" name="n8n_chat_auth_header" value="{{ settings.n8n_chat_auth_header }}" placeholder="{{ t('settings.n8n_chat_auth_ph') }}" autocomplete="off">
+      </label>
+      <label>
+        {{ t('settings.generic_url') }}
+        <input type="url" name="generic_webhook_url" value="{{ settings.generic_webhook_url }}">
+      </label>
+      <label>
+        {{ t('settings.alert_cd') }}
+        <input type="number" name="alert_cooldown_seconds" min="30" max="86400" value="{{ settings.alert_cooldown_seconds }}">
+      </label>
+      <label>
+        {{ t('settings.min_sev') }}
+        <select name="alert_min_severity">
+          {% for s in ['info', 'warning', 'critical'] %}
+          <option value="{{ s }}" {% if settings.alert_min_severity == s %}selected{% endif %}>{{ t('status.' + s) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ t('settings.ha_rest') }}</legend>
+      <label>
+        {{ t('settings.ha_url') }}
+        <input type="url" name="ha_url" value="{{ settings.ha_url }}" placeholder="http://homeassistant.local:8123">
+      </label>
+      <label>
+        {{ t('settings.ha_token') }}
+        <input type="password" name="ha_token" value="{{ settings.ha_token }}" autocomplete="off">
+      </label>
+      <label>
+        {{ t('settings.notify') }}
+        <input type="text" name="ha_notify_service" value="{{ settings.ha_notify_service }}" placeholder="notify.mobile_app_pixel">
+      </label>
+      <label>
+        {{ t('settings.pinned') }}
+        <input type="text" name="ha_pinned_entities" value="{{ settings.ha_pinned_entities }}" placeholder="sensor.living_temp,switch.office">
+        <small>{{ t('settings.pinned_help') }}</small>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>{{ t('settings.ha_mqtt') }}</legend>
+      <label>
+        {{ t('settings.broker') }}
+        <input type="text" name="mqtt_host" value="{{ settings.mqtt_host }}" placeholder="mosquitto">
+      </label>
+      <div class="rw-pair">
+        <label>{{ t('settings.port') }} <input type="number" name="mqtt_port" min="1" max="65535" value="{{ settings.mqtt_port }}"></label>
+        <label>{{ t('settings.topic') }} <input type="text" name="mqtt_base_topic" value="{{ settings.mqtt_base_topic }}"></label>
+      </div>
+      <label>
+        {{ t('settings.user') }}
+        <input type="text" name="mqtt_username" value="{{ settings.mqtt_username }}" autocomplete="off">
+      </label>
+      <label>
+        {{ t('settings.password') }}
+        <input type="password" name="mqtt_password" value="{{ settings.mqtt_password }}" autocomplete="off">
+      </label>
+    </fieldset>
+
+    <button type="submit">{{ t('settings.save') }}</button>
+  </form>
+
+  <section class="rw-card">
+    <header class="rw-card-head">
+      <h2>{{ t('settings.test_title') }}</h2>
+    </header>
+    <p class="rw-muted">{{ t('settings.test_help') }}</p>
+    <div class="rw-test-row">
+      {% for ch in ['telegram', 'whatsapp', 'n8n', 'generic', 'homeassistant', 'all'] %}
+      <button type="button" class="secondary outline rw-tiny" data-test-channel="{{ ch }}">{{ t('settings.test', channel=ch) }}</button>
+      {% endfor %}
+      <button type="button" class="secondary outline rw-tiny" id="test-n8n-chat">{{ t('settings.test_chat') }}</button>
+    </div>
+  </section>
+</section>
+{% endblock %}

@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: RackWatch
+    orgId: 1
+    folder: RackWatch
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: false

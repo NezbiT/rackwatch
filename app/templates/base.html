@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}" data-theme="{{ theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="{{ 'light' if theme == 'light' else 'dark' }}">
+  <meta name="theme-color" content="{{ '#f3f1fb' if theme == 'light' else '#07070f' }}">
+  <title>{% block title %}{{ t('dash.title') }}{% endblock %} · RackWatch</title>
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  {% if n8n_chat %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@n8n/chat@0.46.0/dist/style.css">
+  {% endif %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script>window.RW = { lang: {{ lang|tojson }}, theme: {{ theme|tojson }}, i18n: {{ i18n_json|safe }}, n8nChat: {{ n8n_chat|tojson }}, n8nChatMode: {{ (nav == 'chat')|tojson }} };</script>
+  {% block head %}{% endblock %}
+</head>
+<body class="rw-body" data-nav="{{ nav }}">
+  <div class="rw-parallax" aria-hidden="true">
+    <div class="rw-parallax-nebula"></div>
+    <div class="rw-parallax-stars"></div>
+  </div>
+  <a class="skip-link" href="#main">{{ t('nav.skip') }}</a>
+
+  <header class="rw-top">
+    <a class="rw-brand" href="/" aria-label="{{ t('nav.home') }}">
+      <img src="/static/img/favicon.svg" width="32" height="32" alt="">
+      <span class="rw-brand-text">
+        <strong>RackWatch</strong>
+        <small>{{ settings.instance_name }}</small>
+      </span>
+    </a>
+
+    <nav class="rw-nav" aria-label="{{ t('nav.primary') }}">
+      <a href="/" class="{% if nav == 'dashboard' %}is-active{% endif %}">{{ t('nav.dashboard') }}</a>
+      <a href="/services" class="{% if nav == 'services' %}is-active{% endif %}">{{ t('nav.services') }}</a>
+      <a href="/alerts" class="{% if nav == 'alerts' %}is-active{% endif %}">{{ t('nav.alerts') }}</a>
+      <a href="/chat" class="{% if nav == 'chat' %}is-active{% endif %}">{{ t('nav.chat') }}</a>
+      <a href="/graphs" class="{% if nav == 'graphs' %}is-active{% endif %}">{{ t('nav.graphs') }}</a>
+      <a href="/home-assistant" class="{% if nav == 'ha' %}is-active{% endif %}">{{ t('nav.ha') }}</a>
+      <a href="/settings" class="{% if nav == 'settings' %}is-active{% endif %}">{{ t('nav.settings') }}</a>
+    </nav>
+
+    <div class="rw-top-meta">
+      {% include "partials/live_indicator.html" %}
+      <div class="rw-switchers">
+        <div class="rw-seg" role="group" aria-label="{{ t('prefs.language') }}">
+          <a href="/prefs?lang=en&amp;next={{ here|urlencode }}" class="{% if lang == 'en' %}is-active{% endif %}" hreflang="en" lang="en">EN</a>
+          <a href="/prefs?lang=es&amp;next={{ here|urlencode }}" class="{% if lang == 'es' %}is-active{% endif %}" hreflang="es" lang="es">ES</a>
+        </div>
+        <button type="button" class="rw-icon-btn" id="theme-toggle" aria-pressed="{{ 'true' if theme == 'dark' else 'false' }}" title="{{ t('prefs.toggle_theme') }}">
+          <span class="rw-theme-dark" aria-hidden="true">☾</span>
+          <span class="rw-theme-light" aria-hidden="true">☀</span>
+          <span class="visually-hidden">{{ t('prefs.toggle_theme') }}</span>
+        </button>
+      </div>
+      {% if auth_enabled %}
+      <form method="post" action="/logout" class="rw-logout">
+        <button type="submit" class="secondary outline">{{ t('nav.sign_out') }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </header>
+
+  <main id="main" class="rw-main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <nav class="rw-bottom" aria-label="{{ t('nav.mobile') }}">
+    <a href="/" class="{% if nav == 'dashboard' %}is-active{% endif %}">
+      <span aria-hidden="true">▣</span> {{ t('nav.dashboard') }}
+    </a>
+    <a href="/services" class="{% if nav == 'services' %}is-active{% endif %}">
+      <span aria-hidden="true">▤</span> {{ t('nav.services') }}
+    </a>
+    <a href="/alerts" class="{% if nav == 'alerts' %}is-active{% endif %}">
+      <span aria-hidden="true">●</span> {{ t('nav.alerts') }}
+    </a>
+    <a href="/graphs" class="{% if nav == 'graphs' %}is-active{% endif %}">
+      <span aria-hidden="true">▦</span> {{ t('nav.graphs') }}
+    </a>
+    <a href="/settings" class="{% if nav == 'settings' %}is-active{% endif %}">
+      <span aria-hidden="true">⚙</span> {{ t('nav.more') }}
+    </a>
+  </nav>
+
+  <div id="confirm-root" class="rw-modal" hidden>
+    <div class="rw-modal-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body" class="rw-muted"></p>
+      <div class="rw-modal-actions">
+        <button type="button" class="secondary outline" id="confirm-cancel">{{ t('action.cancel') }}</button>
+        <button type="button" id="confirm-ok">{{ t('action.restart_now') }}</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-root" class="rw-toasts" aria-live="polite" aria-atomic="true"></div>
+
+  <a class="rw-chat-cta{% if n8n_chat or nav in ['chat', 'settings'] %} is-hidden{% endif %}" id="n8n-chat-cta" href="/settings#n8n-chat" title="{{ t('chat.cta') }}">
+    <span class="rw-chat-cta-full">{{ t('chat.cta') }}</span>
+    <span class="rw-chat-cta-short" aria-hidden="true">n8n</span>
+  </a>
+  <div id="n8n-chat" class="rw-n8n-mount"></div>
+
+  <script src="/static/js/app.js" defer></script>
+  {% if n8n_chat %}
+  <script type="module" src="/static/js/n8n-chat.js"></script>
+  {% endif %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

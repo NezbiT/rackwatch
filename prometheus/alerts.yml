@@ -1,0 +1,30 @@
+# Optional Prometheus-native rules. RackWatch evaluates the same
+# thresholds itself so alerts still fire if you never open Alertmanager.
+# Keep this file for Grafana / future Alertmanager fans.
+
+groups:
+  - name: rackwatch-host
+    rules:
+      - alert: HighCPU
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100) > 95
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CPU critical on {{ $labels.instance }}"
+
+      - alert: HighRAM
+        expr: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 95
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RAM critical on {{ $labels.instance }}"
+
+      - alert: DiskFilling
+        expr: 100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Root disk > 90% on {{ $labels.instance }}"

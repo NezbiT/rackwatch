@@ -1,0 +1,147 @@
+# =============================================================================
+# RackWatch stack — app + Prometheus + Grafana + node-exporter + cAdvisor
+# Target: CasaOS App store (custom compose), Proxmox LXC/VM, or plain Docker.
+# Docs: README.md and docs/INSTALL.md
+# =============================================================================
+
+name: rackwatch
+
+services:
+  rackwatch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rackwatch:0.1.0
+    container_name: rackwatch
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      GRAFANA_URL: http://grafana:3000
+      DATABASE_URL: sqlite+aiosqlite:////data/rackwatch.db
+      DOCKER_HOST: unix:///var/run/docker.sock
+    ports:
+      - "8080:8080"
+    volumes:
+      - rackwatch-data:/data
+      # Read-write: required for auto-restart. Drop to :ro to make RackWatch observe-only.
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - prometheus
+    networks:
+      - rackwatch
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: rackwatch-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - rackwatch
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: rackwatch-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_SECURITY_COOKIE_SAMESITE: disabled
+      GF_SERVER_ROOT_URL: ${GRAFANA_PUBLIC_URL:-http://localhost:3001}
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - rackwatch
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: rackwatch-node-exporter
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+      - --collector.textfile.directory=/textfile
+    volumes:
+      - /:/host:ro,rslave
+      - ./data/textfile:/textfile:ro
+    ports:
+      - "9100:9100"
+    networks:
+      - rackwatch
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    container_name: rackwatch-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8081:8080"
+    networks:
+      - rackwatch
+    command:
+      - --housekeeping_interval=15s
+      - --docker_only=true
+
+  # Optional MQTT broker for Home Assistant discovery.
+  # Start with: docker compose --profile mqtt up -d
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: rackwatch-mosquitto
+    restart: unless-stopped
+    profiles: ["mqtt"]
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    networks:
+      - rackwatch
+
+networks:
+  rackwatch:
+    name: rackwatch
+
+volumes:
+  rackwatch-data:
+  prometheus-data:
+  grafana-data:
+  mosquitto-data:

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ t('dash.title') }}{% endblock %}
+{% block content %}
+<section class="rw-page">
+  <header class="rw-page-head">
+    <div>
+      <h1>{{ t('dash.title') }}</h1>
+      <p class="rw-lede">{{ t('dash.lede', seconds=settings.refresh_seconds) }}</p>
+    </div>
+  </header>
+
+  <form class="rw-filters" id="filter-form" aria-label="{{ t('dash.filters') }}">
+    <label>
+      {{ t('filter.host') }}
+      <input type="search" name="host" id="filter-host" placeholder="{{ t('filter.host_ph') }}" autocomplete="off">
+    </label>
+    <label>
+      {{ t('filter.service') }}
+      <input type="search" name="service" id="filter-service" placeholder="{{ t('filter.service_ph') }}" autocomplete="off">
+    </label>
+    <label>
+      {{ t('filter.severity') }}
+      <select name="severity" id="filter-severity">
+        <option value="">{{ t('filter.any_severity') }}</option>
+        <option value="info">{{ t('filter.info_plus') }}</option>
+        <option value="warning">{{ t('filter.warn_plus') }}</option>
+        <option value="critical">{{ t('filter.crit_only') }}</option>
+      </select>
+    </label>
+    <label>
+      {{ t('filter.status') }}
+      <select name="status" id="filter-status">
+        <option value="">{{ t('filter.any_status') }}</option>
+        <option value="ok">{{ t('status.ok') }}</option>
+        <option value="warning">{{ t('status.warning') }}</option>
+        <option value="error">{{ t('status.error') }}</option>
+      </select>
+    </label>
+    <label>
+      {{ t('filter.range') }}
+      <select name="time_range" id="filter-range">
+        <option value="15m">{{ t('range.15m') }}</option>
+        <option value="1h" selected>{{ t('range.1h') }}</option>
+        <option value="6h">{{ t('range.6h') }}</option>
+        <option value="24h">{{ t('range.24h') }}</option>
+        <option value="7d">{{ t('range.7d') }}</option>
+      </select>
+    </label>
+    <button type="button" class="secondary outline" id="filter-reset">{{ t('filter.reset') }}</button>
+  </form>
+
+  <p class="rw-banner is-warn is-hidden" id="backend-banner" role="status"></p>
+
+  <section id="metric-cards" class="rw-metrics" aria-label="{{ t('dash.hosts') }}">
+    {% include "partials/metric_cards.html" %}
+  </section>
+
+  <div class="rw-split">
+    <section class="rw-card" aria-labelledby="containers-heading">
+      <header class="rw-card-head">
+        <h2 id="containers-heading">{{ t('dash.containers') }}</h2>
+        <p class="rw-muted" id="container-count"></p>
+      </header>
+      <div id="container-table">
+        {% include "partials/container_table.html" %}
+      </div>
+    </section>
+
+    <aside class="rw-stack">
+      <section class="rw-card" aria-labelledby="zfs-heading">
+        <header class="rw-card-head">
+          <h2 id="zfs-heading">{{ t('dash.zfs') }}</h2>
+        </header>
+        <div id="zfs-list">
+          {% include "partials/zfs_list.html" %}
+        </div>
+      </section>
+
+      <section class="rw-card" aria-labelledby="ha-heading">
+        <header class="rw-card-head">
+          <h2 id="ha-heading">{{ t('dash.ha') }}</h2>
+          <a href="/home-assistant">{{ t('dash.open') }}</a>
+        </header>
+        <div id="ha-mini">
+          {% include "partials/ha_entities.html" %}
+        </div>
+      </section>
+
+      <section class="rw-card" aria-labelledby="alert-heading">
+        <header class="rw-card-head">
+          <h2 id="alert-heading">{{ t('dash.alerts') }}</h2>
+          <a href="/alerts">{{ t('dash.all_alerts') }}</a>
+        </header>
+        <div id="alert-mini">
+          {% include "partials/alert_list.html" %}
+        </div>
+      </section>
+    </aside>
+  </div>
+</section>
+{% endblock %}

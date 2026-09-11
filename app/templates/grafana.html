@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ t('graphs.title') }}{% endblock %}
+{% block content %}
+<section class="rw-page">
+  <header class="rw-page-head">
+    <div>
+      <h1>{{ t('graphs.title') }}</h1>
+      <p class="rw-lede">{{ t('graphs.lede') }}</p>
+    </div>
+  </header>
+
+  <form class="rw-filters" method="get" action="/graphs">
+    <label>
+      {{ t('graphs.dashboard') }}
+      <select name="panel" onchange="this.form.submit()">
+        <option value="overview" {% if panel == 'overview' %}selected{% endif %}>{{ t('graphs.overview') }}</option>
+        <option value="docker" {% if panel == 'docker' %}selected{% endif %}>{{ t('graphs.docker') }}</option>
+      </select>
+    </label>
+    <label>
+      {{ t('filter.range') }}
+      <select name="range" onchange="this.form.submit()">
+        {% for value in ['15m','1h','6h','24h','7d'] %}
+        <option value="{{ value }}" {% if time_range == value %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <a class="secondary" href="{{ settings.grafana_public_url }}" target="_blank" rel="noopener">{{ t('graphs.open') }}</a>
+  </form>
+
+  {% set from_map = {'15m': 'now-15m', '1h': 'now-1h', '6h': 'now-6h', '24h': 'now-24h', '7d': 'now-7d'} %}
+  {% set src = settings.grafana_public_url.rstrip('/') ~ '/d/' ~ settings.grafana_dashboard_uid ~ '/rackwatch-overview?orgId=1&theme=' ~ theme ~ '&kiosk&from=' ~ from_map.get(time_range, 'now-1h') ~ '&to=now' %}
+
+  <section class="rw-card rw-embed-card">
+    <iframe
+      class="rw-embed"
+      title="{{ t('graphs.iframe') }}"
+      src="{{ src }}"
+      loading="lazy"
+      referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <p class="rw-muted rw-embed-help">
+      {{ t('graphs.embed') }}: <code>{{ src }}</code>
+    </p>
+  </section>
+</section>
+{% endblock %}
