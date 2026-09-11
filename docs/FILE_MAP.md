@@ -84,6 +84,7 @@ Every path in this repository and why it exists. Use this when you onboard a sec
 | `docs/HOME_ASSISTANT.md` | REST, notify, MQTT discovery |
 | `docs/ALERTS.md` | Telegram / WhatsApp / n8n setup |
 | `docs/N8N.md` | Alert webhook + chat widget + operator tools |
+| `docs/COMPARE.md` | RackWatch vs Netdata / Grafana / Uptime Kuma / Dashy |
 | `docs/CONFIGURATION.md` | Every env var |
 | `docs/SECURITY.md` | Socket, tokens, what not to expose |
 | `docs/SAAS.md` | Multi-tenant / hosted roadmap |
