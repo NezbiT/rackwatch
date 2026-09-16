@@ -68,6 +68,17 @@ async def snapshot(
     return snap
 
 
+@router.get("/glances")
+async def glances_summary(
+    request: Request,
+    _: Annotated[None, Depends(require_read)],
+):
+    data = await request.app.state.glances.summary()
+    if not data:
+        raise HTTPException(status_code=503, detail="Glances is not configured or unreachable")
+    return {"ok": True, "data": data}
+
+
 @router.get("/alerts")
 async def list_alerts(
     _: Annotated[None, Depends(require_read)],

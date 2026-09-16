@@ -280,6 +280,30 @@
     setHtml(root, html);
   }
 
+  function renderGlances(data) {
+    const root = $("glances-panel");
+    const status = $("glances-status");
+    if (!root) return;
+    if (!data || !Object.keys(data).length) {
+      if (status) status.textContent = "offline / no configurado";
+      return;
+    }
+    if (status) status.textContent = "conectado";
+    const q = data.quicklook || {};
+    const m = data.memswap || {};
+    const net = Array.isArray(data.network) ? data.network.slice(0, 6) : [];
+    const procs = Array.isArray(data.processes) ? data.processes.slice(0, 6) : [];
+    const pct = (v) => v == null ? "—" : `${Number(v).toFixed(1)}%`;
+    root.className = "rw-output";
+    root.innerHTML = `<div class="rw-glances-grid">
+      <span>CPU <b>${pct(q.cpu)}</b></span><span>RAM <b>${pct(q.mem)}</b></span>
+      <span>SWAP <b>${pct(m.percent)}</b></span><span>Load <b>${q.load || "—"}</b></span>
+    </div><details><summary>Procesos y red</summary>
+      <pre>${esc(procs.map(p => `${p.name || p.cmdline || "?"}: CPU ${pct(p.cpu_percent)} RAM ${pct(p.memory_percent)}`).join("\n") || "Sin procesos")}
+${esc(net.map(n => `${n.interface_name || n.key || "?"}: ↓ ${n.bytes_recv_rate_per_sec || 0}/s ↑ ${n.bytes_sent_rate_per_sec || 0}/s`).join("\n") || "Sin interfaces")}</pre>
+    </details>`;
+  }
+
   function banner(snap) {
     const el = $("backend-banner");
     if (!el) return;
@@ -303,6 +327,7 @@
     renderZfs(snap.zfs || []);
     renderHa(snap.ha_entities || [], !!snap.ha_ok);
     renderAlerts(snap.alerts || []);
+    renderGlances(snap.glances || {});
     banner(snap);
     const n = (snap.alerts || []).length;
     document.querySelectorAll('a[href="/alerts"]').forEach((a) => {

@@ -122,6 +122,7 @@ class Snapshot(BaseModel):
     ha_entities: list[HAEntity] = Field(default_factory=list)
     alerts: list[AlertOut] = Field(default_factory=list)
     summary: dict[str, Any] = Field(default_factory=dict)
+    glances: dict[str, Any] = Field(default_factory=dict)
 
 
 class WsClientMessage(BaseModel):

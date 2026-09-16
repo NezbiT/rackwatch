@@ -30,6 +30,7 @@ from app.services.alerter import Alerter
 from app.services.collector import Collector
 from app.services.docker_ctl import DockerControl
 from app.services.homeassistant import HomeAssistant
+from app.services.glances import GlancesClient
 from app.services.hub import Hub
 from app.services.mqtt_bridge import MqttBridge
 from app.services.n8n_chat import N8nChat
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
     mqtt = MqttBridge(settings)
     alerter = Alerter(settings, ha=ha, mqtt=mqtt)
     n8n_chat = N8nChat()
+    glances = GlancesClient(settings)
     collector = Collector(
         hub=hub,
         prom=prom,
@@ -74,6 +76,7 @@ async def lifespan(app: FastAPI):
         alerter=alerter,
         ha=ha,
         mqtt=mqtt,
+        glances=glances,
     )
 
     app.state.settings = settings
@@ -82,6 +85,7 @@ async def lifespan(app: FastAPI):
     app.state.docker = docker
     app.state.alerter = alerter
     app.state.n8n_chat = n8n_chat
+    app.state.glances = glances
     app.state.ha = ha
     app.state.mqtt = mqtt
     app.state.collector = collector
@@ -102,6 +106,7 @@ async def lifespan(app: FastAPI):
         await ha.close()
         await alerter.close()
         await n8n_chat.close()
+        await glances.close()
         log.info("RackWatch stopped")
 
 

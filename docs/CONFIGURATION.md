@@ -34,12 +34,15 @@ UI values win until you delete the row (or the SQLite file). Secrets typed into 
 | `GRAFANA_URL` | `http://grafana:3000` |
 | `GRAFANA_PUBLIC_URL` | `http://localhost:3001` |
 | `GRAFANA_DASHBOARD_UID` | `rackwatch-overview` |
+| `GLANCES_URL` | empty (optional Glances REST API) |
 | `DOCKER_HOST` | `unix:///var/run/docker.sock` |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./data/rackwatch.db` |
 
 Compose overrides `DATABASE_URL` to `/data/rackwatch.db`.
 
 `GRAFANA_PUBLIC_URL` is what the **browser** loads. `grafana:3000` only works inside Docker DNS, so never put that in the iframe.
+
+`GLANCES_URL` is optional. Set it to the Glances REST base URL, for example `http://glances:61208` or `http://10.13.58.100:61208`, to add swap, network, disk I/O, processes, and sensors to the RackWatch dashboard.
 
 ---
 

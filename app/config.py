@@ -68,6 +68,7 @@ class Settings(BaseSettings):
         default="rackwatch-overview",
         validation_alias="GRAFANA_DASHBOARD_UID",
     )
+    glances_url: str = Field(default="", validation_alias="GLANCES_URL")
 
     # Thresholds
     threshold_cpu_warn: float = Field(default=85, validation_alias="THRESHOLD_CPU_WARN")

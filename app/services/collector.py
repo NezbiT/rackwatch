@@ -48,6 +48,7 @@ class Collector:
         alerter: Alerter,
         ha: HomeAssistant,
         mqtt: MqttBridge,
+        glances=None,
     ) -> None:
         self.hub = hub
         self.prom = prom
@@ -57,6 +58,7 @@ class Collector:
         self.alerter = alerter
         self.ha = ha
         self.mqtt = mqtt
+        self.glances = glances
         self.started_at = time.time()
         self._task: asyncio.Task[None] | None = None
 
@@ -111,6 +113,7 @@ class Collector:
         containers = await self.docker.list_containers(usage)
         zfs = await self.zfs.pools()
         ha_entities = await self.ha.entities() if ha_ok else []
+        glances_data = await self.glances.summary() if self.glances else {}
 
         if not hosts:
             hosts = [read_local_host(settings)]
@@ -129,6 +132,7 @@ class Collector:
             ha_entities=ha_entities,
             alerts=[],
             summary=summary,
+            glances=glances_data,
         )
 
         await self.restarter.evaluate(containers)
