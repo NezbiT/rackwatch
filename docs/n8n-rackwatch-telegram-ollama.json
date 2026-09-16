@@ -1,0 +1,84 @@
+{
+  "name": "RackWatch · Ollama · Telegram",
+  "nodes": [
+    {
+      "parameters": {"httpMethod":"POST","path":"rackwatch-alert","responseMode":"responseNode","options":{}},
+      "id":"rw-alert-webhook","name":"RackWatch Alert","type":"n8n-nodes-base.webhook","typeVersion":2.1,"position":[-980,-260],"webhookId":"rackwatch-alert"
+    },
+    {
+      "parameters": {"method":"GET","url":"={{ ($env.RACKWATCH_URL || 'http://10.13.58.100:8180') + '/api/v1/snapshot' }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"X-API-Key","value":"={{ $env.RACKWATCH_API_TOKEN }}"}]},"options":{"timeout":15000}},
+      "id":"rw-alert-snapshot","name":"RackWatch Snapshot · Alert","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[-760,-260]
+    },
+    {
+      "parameters": {"jsCode":"const raw = $('RackWatch Alert').item.json.body || $('RackWatch Alert').item.json;\nconst snap = $json;\nconst alert = {\n  title: String(raw.title || 'RackWatch alerta'),\n  message: String(raw.message || ''),\n  severity: String(raw.severity || 'warning'),\n  source: String(raw.source || 'rackwatch'),\n  host: String(raw.host || snap.instance || ''),\n  service: String(raw.service || ''),\n  fingerprint: String(raw.fingerprint || '')\n};\nreturn [{ json: { alert, service: alert.service || 'rackwatch', snapshot: snap } }];"},
+      "id":"rw-alert-prep","name":"Preparar alerta","type":"n8n-nodes-base.code","typeVersion":2,"position":[-520,-260]
+    },
+    {
+      "parameters": {"method":"GET","url":"={{ ($env.RACKWATCH_URL || 'http://10.13.58.100:8180') + '/api/v1/containers/' + encodeURIComponent($json.service) + '/logs?lines=100' }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"X-API-Key","value":"={{ $env.RACKWATCH_API_TOKEN }}"}]},"options":{"timeout":15000,"response":{"response":{"neverError":true}}}},
+      "id":"rw-alert-logs","name":"Logs del servicio","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[-280,-260]
+    },
+    {
+      "parameters": {"method":"POST","url":"={{ ($env.OLLAMA_URL || 'http://10.13.58.50:11434').replace(/\\/$/, '') + '/api/chat' }}","sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"model\": \"{{ $env.OLLAMA_MODEL || 'RackWatchBot' }}\",\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.2, \"num_predict\": 500 },\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"Eres RackWatchBot, operador senior de homelab. Responde en español y en menos de 1000 palabras. Usa exactamente estas secciones: Estado, Evidencia, Diagnóstico, Acciones seguras y Verificación. Marca la incertidumbre. No inventes datos. No ordenes reinicios ni acciones destructivas automáticamente; si hace falta, da el comando como opción manual.\" },\n    { \"role\": \"user\", \"content\": {{ JSON.stringify('Analiza esta alerta de RackWatch.\nALERTA:\n' + JSON.stringify($('Preparar alerta').item.json.alert) + '\nSNAPSHOT:\n' + JSON.stringify($('Preparar alerta').item.json.snapshot) + '\nLOGS:\n' + String($json.logs || $json.detail || JSON.stringify($json)).slice(-7000)) }} }\n  ]\n}","options":{"timeout":120000}},
+      "id":"rw-alert-ollama","name":"Ollama · Diagnóstico alerta","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[0,-260]
+    },
+    {
+      "parameters": {"jsCode":"const a = $('Preparar alerta').item.json.alert;\nconst content = String($json.message?.content || $json.error || 'Ollama no devolvió diagnóstico.');\nconst esc = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst header = `<b>RackWatch · ${esc(a.severity.toUpperCase())}</b>\\n<b>${esc(a.title)}</b>\\nServicio: <code>${esc(a.service || 'host')}</code>\\nFingerprint: <code>${esc(a.fingerprint || 'n/a')}</code>\\n\\n`;\nreturn [{ json: { text: (header + esc(content)).slice(0, 3950), fingerprint: a.fingerprint } }];"},
+      "id":"rw-alert-format","name":"Formatear Telegram · Alerta","type":"n8n-nodes-base.code","typeVersion":2,"position":[240,-260]
+    },
+    {
+      "parameters": {"method":"POST","url":"=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage","sendBody":true,"specifyBody":"json","jsonBody":"={\"chat_id\":\"{{ $env.TELEGRAM_CHAT_ID }}\",\"text\":{{ JSON.stringify($json.text) }},\"parse_mode\":\"HTML\",\"disable_web_page_preview\":true}","options":{"timeout":20000}},
+      "id":"rw-alert-telegram","name":"Telegram · Alerta","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[500,-260]
+    },
+    {
+      "parameters": {"respondWith":"json","responseBody":"={{ { ok: true, fingerprint: $('Formatear Telegram · Alerta').item.json.fingerprint, telegram: $json.ok === true } }}"},
+      "id":"rw-alert-response","name":"Responder a RackWatch","type":"n8n-nodes-base.respondToWebhook","typeVersion":1.1,"position":[740,-260]
+    },
+    {
+      "parameters": {"updates":["message"],"options":{}},
+      "id":"tg-trigger","name":"Telegram · Chat","type":"n8n-nodes-base.telegramTrigger","typeVersion":1.2,"position":[-980,260],"credentials":{"telegramApi":{"id":"REEMPLAZAR_CREDENTIAL_ID","name":"RackWatch Telegram Bot"}}
+    },
+    {
+      "parameters": {"jsCode":"const m = $json.message || $json.edited_message || {};\nconst text = String(m.text || '').trim();\nreturn [{ json: { chatId: m.chat?.id, user: m.from?.username || m.from?.first_name || 'usuario', text: text || 'Diagnostica el estado actual del homelab.' } }];"},
+      "id":"tg-prep","name":"Preparar consulta Telegram","type":"n8n-nodes-base.code","typeVersion":2,"position":[-760,260]
+    },
+    {
+      "parameters": {"method":"GET","url":"={{ ($env.RACKWATCH_URL || 'http://10.13.58.100:8180') + '/api/v1/snapshot' }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"X-API-Key","value":"={{ $env.RACKWATCH_API_TOKEN }}"}]},"options":{"timeout":15000}},
+      "id":"tg-snapshot","name":"RackWatch Snapshot · Chat","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[-520,260]
+    },
+    {
+      "parameters": {"method":"GET","url":"={{ ($env.RACKWATCH_URL || 'http://10.13.58.100:8180') + '/api/v1/alerts?range=24h&limit=20' }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"X-API-Key","value":"={{ $env.RACKWATCH_API_TOKEN }}"}]},"options":{"timeout":15000}},
+      "id":"tg-alerts","name":"RackWatch Alertas recientes","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[-280,260]
+    },
+    {
+      "parameters": {"method":"POST","url":"={{ ($env.OLLAMA_URL || 'http://10.13.58.50:11434').replace(/\\/$/, '') + '/api/chat' }}","sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"model\": \"{{ $env.OLLAMA_MODEL || 'RackWatchBot' }}\",\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.2, \"num_predict\": 500 },\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"Eres RackWatchBot. Responde en español, breve y útil. Diagnostica sólo con la evidencia recibida. Usa Estado, Evidencia, Diagnóstico, Acciones seguras y Verificación. No ejecutes ni recomiendes acciones destructivas sin confirmación explícita.\" },\n    { \"role\": \"user\", \"content\": {{ JSON.stringify('Consulta de Telegram de ' + $('Preparar consulta Telegram').item.json.user + ': ' + $('Preparar consulta Telegram').item.json.text + '\\nSNAPSHOT:\\n' + JSON.stringify($('RackWatch Snapshot · Chat').item.json) + '\\nALERTAS 24H:\\n' + JSON.stringify($json)) }} }\n  ]\n}","options":{"timeout":120000}},
+      "id":"tg-ollama","name":"Ollama · Respuesta chat","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[0,260]
+    },
+    {
+      "parameters": {"jsCode":"const q = $('Preparar consulta Telegram').item.json;\nconst content = String($json.message?.content || $json.error || 'No pude obtener una respuesta del modelo.');\nconst esc = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nreturn [{ json: { chatId: q.chatId, text: esc(content).slice(0, 3950) } }];"},
+      "id":"tg-format","name":"Formatear Telegram · Chat","type":"n8n-nodes-base.code","typeVersion":2,"position":[240,260]
+    },
+    {
+      "parameters": {"method":"POST","url":"=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage","sendBody":true,"specifyBody":"json","jsonBody":"={\"chat_id\":{{ JSON.stringify($json.chatId) }},\"text\":{{ JSON.stringify($json.text) }},\"parse_mode\":\"HTML\",\"disable_web_page_preview\":true}","options":{"timeout":20000}},
+      "id":"tg-send","name":"Telegram · Responder chat","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[500,260]
+    }
+  ],
+  "connections": {
+    "RackWatch Alert":{"main":[[{"node":"RackWatch Snapshot · Alert","type":"main","index":0}]]},
+    "RackWatch Snapshot · Alert":{"main":[[{"node":"Preparar alerta","type":"main","index":0}]]},
+    "Preparar alerta":{"main":[[{"node":"Logs del servicio","type":"main","index":0}]]},
+    "Logs del servicio":{"main":[[{"node":"Ollama · Diagnóstico alerta","type":"main","index":0}]]},
+    "Ollama · Diagnóstico alerta":{"main":[[{"node":"Formatear Telegram · Alerta","type":"main","index":0}]]},
+    "Formatear Telegram · Alerta":{"main":[[{"node":"Telegram · Alerta","type":"main","index":0}]]},
+    "Telegram · Alerta":{"main":[[{"node":"Responder a RackWatch","type":"main","index":0}]]},
+    "Telegram · Chat":{"main":[[{"node":"Preparar consulta Telegram","type":"main","index":0}]]},
+    "Preparar consulta Telegram":{"main":[[{"node":"RackWatch Snapshot · Chat","type":"main","index":0}]]},
+    "RackWatch Snapshot · Chat":{"main":[[{"node":"RackWatch Alertas recientes","type":"main","index":0}]]},
+    "RackWatch Alertas recientes":{"main":[[{"node":"Ollama · Respuesta chat","type":"main","index":0}]]},
+    "Ollama · Respuesta chat":{"main":[[{"node":"Formatear Telegram · Chat","type":"main","index":0}]]},
+    "Formatear Telegram · Chat":{"main":[[{"node":"Telegram · Responder chat","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveManualExecutions":true,"saveExecutionProgress":false},
+  "active":false,
+  "versionId":"rackwatch-telegram-ollama-v1",
+  "meta":{"templateCredsSetupCompleted":false}
+}

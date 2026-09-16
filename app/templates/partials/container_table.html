@@ -32,6 +32,8 @@
             data-restart="{{ c.name }}">
             {{ t('action.restart') }}
           </button>
+          <button class="outline secondary rw-tiny" type="button" data-container-logs="{{ c.name }}">{{ t('action.logs') }}</button>
+          <button class="outline secondary rw-tiny" type="button" data-container-inspect="{{ c.name }}">{{ t('action.inspect') }}</button>
         </td>
       </tr>
       {% endfor %}

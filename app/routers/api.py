@@ -18,7 +18,15 @@ from app import __version__
 from app.config import get_settings
 from app.database import async_session
 from app.models import Alert, RestartEvent
-from app.schemas import AlertTestRequest, ContainerActionRequest, HealthOut, RestartRequest, Snapshot
+from app.schemas import (
+    AlertTestRequest,
+    ContainerActionRequest,
+    ContainerExecOut,
+    ContainerExecRequest,
+    HealthOut,
+    RestartRequest,
+    Snapshot,
+)
 from app.security import require_api_token, require_read, require_session
 from app.services import settings_store
 from app.services.alerter import recent_alerts
@@ -128,6 +136,38 @@ async def container_logs(
     if not ok:
         raise HTTPException(status_code=404, detail=detail)
     return {"ok": True, "container": name, "lines": lines, "logs": detail}
+
+
+@router.get("/containers/{name}/inspect")
+async def inspect_container(
+    name: str,
+    request: Request,
+    _: Annotated[None, Depends(require_read)],
+):
+    ok, detail = await request.app.state.docker.inspect(name)
+    if not ok:
+        raise HTTPException(status_code=404, detail=detail)
+    return {"ok": True, "container": name, "inspect": detail}
+
+
+@router.post("/containers/{name}/exec", response_model=ContainerExecOut)
+async def exec_container(
+    name: str,
+    request: Request,
+    body: ContainerExecRequest,
+    _: Annotated[None, Depends(require_api_token)],
+):
+    ok, detail = await request.app.state.docker.exec(name, body.command)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    result = detail
+    return ContainerExecOut(
+        ok=True,
+        container=name,
+        command=body.command,
+        exit_code=result["exit_code"],
+        output=result["output"],
+    )
 
 
 @router.get("/settings")

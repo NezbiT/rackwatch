@@ -141,6 +141,18 @@ class ContainerActionRequest(BaseModel):
     reason: str = "manual"
 
 
+class ContainerExecRequest(BaseModel):
+    command: str = Field(min_length=1, max_length=500)
+
+
+class ContainerExecOut(BaseModel):
+    ok: bool
+    container: str
+    command: str
+    exit_code: int | None = None
+    output: str = ""
+
+
 class ContainerHookIn(BaseModel):
     container: str = Field(min_length=1)
     action: Literal["start", "stop", "restart"] = "restart"

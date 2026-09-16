@@ -152,9 +152,11 @@
           <td class="mono">${fmtPct(c.cpu_percent, 1)}</td>
           <td class="mono">${c.memory_percent != null ? fmtPct(c.memory_percent, 0) : "—"}</td>
           <td>
-            <button class="outline secondary rw-tiny" type="button" data-restart="${esc(c.name)}">
-              ${esc(t("action.restart"))}
-            </button>
+          <button class="outline secondary rw-tiny" type="button" data-restart="${esc(c.name)}">
+            ${esc(t("action.restart"))}
+          </button>
+          <button class="outline secondary rw-tiny" type="button" data-container-logs="${esc(c.name)}">${esc(t("action.logs"))}</button>
+          <button class="outline secondary rw-tiny" type="button" data-container-inspect="${esc(c.name)}">${esc(t("action.inspect"))}</button>
           </td>
         </tr>`;
       })
@@ -554,6 +556,44 @@
     }
   }
 
+  function bindContainerOperations() {
+    const panel = $("container-ops");
+    const output = $("container-output");
+    const selected = $("ops-container");
+    const command = $("container-command");
+    const run = $("container-exec");
+    if (!panel || !output || !selected) return;
+    let container = null;
+    async function load(path) {
+      try {
+        const res = await fetch(`/services/${encodeURIComponent(container)}${path}`);
+        const data = await res.json().catch(() => ({}));
+        output.textContent = res.ok ? (data.logs || JSON.stringify(data.inspect, null, 2)) : (data.detail || String(res.status));
+      } catch (err) { output.textContent = String(err); }
+    }
+    document.body.addEventListener("click", (ev) => {
+      const logs = ev.target.closest("[data-container-logs]");
+      const inspect = ev.target.closest("[data-container-inspect]");
+      if (!logs && !inspect) return;
+      container = (logs || inspect).getAttribute(logs ? "data-container-logs" : "data-container-inspect");
+      panel.hidden = false;
+      selected.textContent = container;
+      output.textContent = "";
+      load(logs ? "/logs?lines=160" : "/inspect");
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    if (run) run.addEventListener("click", async () => {
+      if (!container || !command.value.trim()) return;
+      run.disabled = true;
+      try {
+        const res = await fetch(`/services/${encodeURIComponent(container)}/exec`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: command.value.trim() }) });
+        const data = await res.json().catch(() => ({}));
+        output.textContent = res.ok ? `exit ${data.exit_code}\n${data.output || ""}` : (data.detail || String(res.status));
+      } catch (err) { output.textContent = String(err); }
+      finally { run.disabled = false; }
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     live("connecting", "live.connecting");
     bindFilters();
@@ -561,6 +601,7 @@
     bindTestAlerts();
     bindTheme();
     bindRestart();
+    bindContainerOperations();
     bindParallax();
     bindChatTest();
     connect();

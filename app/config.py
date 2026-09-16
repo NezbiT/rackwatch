@@ -94,6 +94,13 @@ class Settings(BaseSettings):
     )
     auto_restart_allowlist: str = Field(default="", validation_alias="AUTO_RESTART_ALLOWLIST")
 
+    # Operator console. Commands are passed as argv (never through a shell)
+    # and the executable must match this allow-list.
+    container_exec_allowlist: str = Field(
+        default="cat,df,du,env,free,grep,head,hostname,id,ip,ls,printenv,ps,pwd,ss,stat,tail,uname,uptime,whoami",
+        validation_alias="CONTAINER_EXEC_ALLOWLIST",
+    )
+
     docker_host: str = Field(default="unix:///var/run/docker.sock", validation_alias="DOCKER_HOST")
 
     # Alerts
@@ -148,6 +155,10 @@ class Settings(BaseSettings):
     @property
     def allowlist(self) -> list[str]:
         return [n.lower() for n in _csv(self.auto_restart_allowlist)]
+
+    @property
+    def exec_allowlist(self) -> list[str]:
+        return [n.lower() for n in _csv(self.container_exec_allowlist)]
 
     @property
     def pinned_entities(self) -> list[str]:

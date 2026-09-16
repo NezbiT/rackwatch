@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
@@ -185,6 +185,29 @@ async def services_page(
         "services.html",
         _ctx(request, live, nav="services", restarts=restarts),
     )
+
+@router.get("/services/{name}/logs")
+async def service_logs(name: str, request: Request, _: Annotated[None, Depends(require_session)], lines: int = 120):
+    ok, detail = await request.app.state.docker.logs(name, lines=max(1, min(lines, 500)))
+    if not ok:
+        raise HTTPException(status_code=404, detail=detail)
+    return {"ok": True, "container": name, "logs": detail}
+
+@router.get("/services/{name}/inspect")
+async def service_inspect(name: str, request: Request, _: Annotated[None, Depends(require_session)]):
+    ok, detail = await request.app.state.docker.inspect(name)
+    if not ok:
+        raise HTTPException(status_code=404, detail=detail)
+    return {"ok": True, "container": name, "inspect": detail}
+
+@router.post("/services/{name}/exec")
+async def service_exec(name: str, request: Request, _: Annotated[None, Depends(require_session)]):
+    body = await request.json()
+    command = str(body.get("command") or "")
+    ok, detail = await request.app.state.docker.exec(name, command)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    return {"ok": True, "container": name, "command": command, **detail}
 
 
 @router.get("/alerts", response_class=HTMLResponse)

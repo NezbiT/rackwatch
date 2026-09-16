@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import shlex
 import sys
 import time
 from typing import Any
@@ -124,6 +126,66 @@ class DockerControl:
 
     async def stop(self, name_or_id: str, *, force: bool = False) -> tuple[bool, str]:
         return await asyncio.to_thread(self._action_sync, name_or_id, force, "stop")
+
+    async def exec(self, name_or_id: str, command: str) -> tuple[bool, dict[str, Any] | str]:
+        return await asyncio.to_thread(self._exec_sync, name_or_id, command)
+
+    async def inspect(self, name_or_id: str) -> tuple[bool, dict[str, Any] | str]:
+        return await asyncio.to_thread(self._inspect_sync, name_or_id)
+
+    def _exec_sync(self, name_or_id: str, command: str) -> tuple[bool, dict[str, Any] | str]:
+        try:
+            argv = shlex.split(command, posix=True)
+        except ValueError as exc:
+            return False, f"invalid command syntax: {exc}"
+        if not argv or any(token in command for token in (";", "&&", "||", "|", ">", "<", "`", "$", "\\")):
+            return False, "shell operators are not allowed"
+        executable = os.path.basename(argv[0]).lower()
+        if executable in {"sh", "bash", "ash", "zsh", "dash", "cmd", "powershell", "pwsh"}:
+            return False, "shell interpreters are not allowed"
+        if executable not in self.settings.exec_allowlist:
+            return False, f"command '{executable}' is not on the exec allow-list"
+        if any(arg in {"-c", "--command", "--exec"} for arg in argv[1:]):
+            return False, "command interpreters are not allowed"
+        client = self._connect()
+        if client is None:
+            return False, "Docker engine is not reachable"
+        try:
+            container = client.containers.get(name_or_id)
+            result = container.exec_run(argv, stdout=True, stderr=True, demux=False)
+            output = result.output
+            if isinstance(output, tuple):
+                output = b"".join(part or b"" for part in output)
+            text = output.decode("utf-8", "replace") if isinstance(output, bytes) else str(output or "")
+            return True, {"exit_code": result.exit_code, "output": text[-32000:]}
+        except Exception as exc:
+            return False, str(exc)
+
+    def _inspect_sync(self, name_or_id: str) -> tuple[bool, dict[str, Any] | str]:
+        client = self._connect()
+        if client is None:
+            return False, "Docker engine is not reachable"
+        try:
+            container = client.containers.get(name_or_id)
+            attrs = container.attrs
+            state = attrs.get("State") or {}
+            health = (state.get("Health") or {}).get("Status", "")
+            ports = (attrs.get("NetworkSettings") or {}).get("Ports") or {}
+            return True, {
+                "id": container.short_id,
+                "name": (container.name or "").lstrip("/"),
+                "image": _image_name(container),
+                "status": state.get("Status", ""),
+                "health": health,
+                "restart_count": state.get("RestartCount", 0),
+                "started_at": state.get("StartedAt", ""),
+                "entrypoint": (attrs.get("Config") or {}).get("Entrypoint") or [],
+                "command": (attrs.get("Config") or {}).get("Cmd") or [],
+                "ports": ports,
+                "mount_count": len(attrs.get("Mounts") or []),
+            }
+        except Exception as exc:
+            return False, str(exc)
 
     def _guard(self, name_or_id: str, force: bool) -> str:
         if not force and self.is_denied(name_or_id):

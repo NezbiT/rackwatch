@@ -39,6 +39,20 @@
     </div>
   </section>
 
+  <section class="rw-card" id="container-ops" hidden aria-labelledby="ops-heading">
+    <header class="rw-card-head">
+      <h2 id="ops-heading">{{ t('svc.operations') }}</h2>
+      <p class="rw-muted" id="ops-container"></p>
+    </header>
+    <div class="rw-form-grid">
+      <label>{{ t('action.exec') }}
+        <input id="container-command" type="text" maxlength="500" placeholder="ps aux" autocomplete="off">
+      </label>
+      <button type="button" class="secondary" id="container-exec">{{ t('action.run') }}</button>
+    </div>
+    <pre id="container-output" class="rw-output" aria-live="polite"></pre>
+  </section>
+
   <section class="rw-card" aria-labelledby="restart-heading">
     <header class="rw-card-head">
       <h2 id="restart-heading">{{ t('svc.restarts') }}</h2>
