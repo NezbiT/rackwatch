@@ -13,10 +13,12 @@ confirm dialog (`force=1`).
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import os
 import shlex
 import sys
+import tarfile
 import time
 from typing import Any
 
@@ -130,6 +132,12 @@ class DockerControl:
     async def exec(self, name_or_id: str, command: str) -> tuple[bool, dict[str, Any] | str]:
         return await asyncio.to_thread(self._exec_sync, name_or_id, command)
 
+    async def get_file(self, name_or_id: str, path: str) -> tuple[bool, str]:
+        return await asyncio.to_thread(self._get_file_sync, name_or_id, path)
+
+    async def put_file(self, name_or_id: str, path: str, content: str) -> tuple[bool, str]:
+        return await asyncio.to_thread(self._put_file_sync, name_or_id, path, content)
+
     async def inspect(self, name_or_id: str) -> tuple[bool, dict[str, Any] | str]:
         return await asyncio.to_thread(self._inspect_sync, name_or_id)
 
@@ -157,7 +165,49 @@ class DockerControl:
             if isinstance(output, tuple):
                 output = b"".join(part or b"" for part in output)
             text = output.decode("utf-8", "replace") if isinstance(output, bytes) else str(output or "")
-            return True, {"exit_code": result.exit_code, "output": text[-32000:]}
+            return True, {"exit_code": result.exit_code, "output": text[-500000:]}
+        except Exception as exc:
+            return False, str(exc)
+
+    def _get_file_sync(self, name_or_id: str, path: str) -> tuple[bool, str]:
+        client = self._connect()
+        if client is None:
+            return False, "Docker engine is not reachable"
+        try:
+            container = client.containers.get(name_or_id)
+            bits, _ = container.get_archive(path)
+            tar_bytes = b"".join(bits)
+            with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
+                member = tar.next()
+                if member is None:
+                    return False, "empty archive"
+                f = tar.extractfile(member)
+                if f is None:
+                    return False, "could not extract file"
+                content = f.read().decode("utf-8", "replace")
+                return True, content
+        except Exception as exc:
+            return False, str(exc)
+
+    def _put_file_sync(self, name_or_id: str, path: str, content: str) -> tuple[bool, str]:
+        client = self._connect()
+        if client is None:
+            return False, "Docker engine is not reachable"
+        try:
+            container = client.containers.get(name_or_id)
+            dirname = os.path.dirname(path) or "/"
+            basename = os.path.basename(path)
+            data = content.encode("utf-8")
+            tar_buf = io.BytesIO()
+            with tarfile.open(fileobj=tar_buf, mode="w") as tar:
+                ti = tarfile.TarInfo(name=basename)
+                ti.size = len(data)
+                ti.mtime = int(time.time())
+                ti.mode = 0o644
+                tar.addfile(ti, io.BytesIO(data))
+            tar_buf.seek(0)
+            container.put_archive(dirname, tar_buf)
+            return True, "ok"
         except Exception as exc:
             return False, str(exc)
 

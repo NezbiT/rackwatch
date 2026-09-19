@@ -146,6 +146,15 @@ class ContainerExecRequest(BaseModel):
     command: str = Field(min_length=1, max_length=500)
 
 
+class ContainerFileReadRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=1000)
+
+
+class ContainerFileWriteRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=1000)
+    content: str
+
+
 class ContainerExecOut(BaseModel):
     ok: bool
     container: str

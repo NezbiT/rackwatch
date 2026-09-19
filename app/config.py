@@ -99,7 +99,7 @@ class Settings(BaseSettings):
     # Operator console. Commands are passed as argv (never through a shell)
     # and the executable must match this allow-list.
     container_exec_allowlist: str = Field(
-        default="cat,df,du,env,free,grep,head,hostname,id,ip,ls,printenv,ps,pwd,ss,stat,tail,uname,uptime,whoami",
+        default="cat,df,du,env,free,grep,head,hostname,id,ip,ls,n8n,node,printenv,ps,pwd,ss,stat,tail,uname,uptime,whoami",
         validation_alias="CONTAINER_EXEC_ALLOWLIST",
     )
 

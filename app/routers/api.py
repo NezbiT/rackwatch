@@ -23,6 +23,8 @@ from app.schemas import (
     ContainerActionRequest,
     ContainerExecOut,
     ContainerExecRequest,
+    ContainerFileReadRequest,
+    ContainerFileWriteRequest,
     HealthOut,
     RestartRequest,
     Snapshot,
@@ -181,6 +183,32 @@ async def exec_container(
     )
 
 
+@router.post("/containers/{name}/file/read")
+async def read_container_file(
+    name: str,
+    body: ContainerFileReadRequest,
+    request: Request,
+    _: Annotated[None, Depends(require_api_token)],
+):
+    ok, content = await request.app.state.docker.get_file(name, body.path)
+    if not ok:
+        raise HTTPException(status_code=400, detail=content)
+    return {"ok": True, "container": name, "path": body.path, "content": content}
+
+
+@router.post("/containers/{name}/file/write")
+async def write_container_file(
+    name: str,
+    body: ContainerFileWriteRequest,
+    request: Request,
+    _: Annotated[None, Depends(require_api_token)],
+):
+    ok, detail = await request.app.state.docker.put_file(name, body.path, body.content)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
+    return {"ok": True, "container": name, "path": body.path}
+
+
 @router.get("/settings")
 async def get_settings_public(
     _: Annotated[None, Depends(require_read)],
@@ -296,7 +324,6 @@ async def n8n_chat_proxy(
         body=body,
         content_type=request.headers.get("content-type"),
     )
-
 
 @router.post("/chat/test")
 async def n8n_chat_test(
