@@ -71,3 +71,9 @@ def test_hooks_require_token(client):
     )
     assert res.status_code == 200
     assert res.json()["ok"] is True
+
+
+def test_static_brand_assets(client):
+    for asset in ["/static/img/logo.svg", "/static/img/favicon.svg", "/static/img/logo.png", "/static/img/favicon.png"]:
+        res = client.get(asset)
+        assert res.status_code == 200

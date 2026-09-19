@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RackWatch · Conceptos de Logo e Iconografía</title>
+  <style>
+    :root {
+      --bg: #070b14;
+      --card-bg: rgba(15, 23, 42, 0.7);
+      --border: rgba(99, 102, 241, 0.25);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-cyan: #06b6d4;
+      --accent-indigo: #6366f1;
+      --accent-green: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 40px 24px;
+      min-height: 100vh;
+    }
+    header {
+      text-align: center;
+      max-width: 760px;
+      margin: 0 auto 48px auto;
+    }
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+    p.lead {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      line-height: 1.6;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 28px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      backdrop-filter: blur(16px);
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(6, 182, 212, 0.6);
+      box-shadow: 0 12px 30px rgba(6, 182, 212, 0.15);
+    }
+    .preview-box {
+      width: 200px;
+      height: 200px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #030712;
+      border-radius: 24px;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .preview-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      background: rgba(99, 102, 241, 0.15);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      margin-bottom: 12px;
+    }
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .desc {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>RackWatch · Conceptos de Logo</h1>
+    <p class="lead">Exploración visual e iconografía diseñada para la nueva interfaz moderna y glassmorphic del panel de control de homelab.</p>
+  </header>
+
+  <main class="grid">
+    <div class="card">
+      <div class="badge">Concepto 01</div>
+      <div class="preview-box">
+        <img src="../app/static/img/concept-1-pulse-stack.png" alt="Concepto 1: Pulse Stack">
+      </div>
+      <h2>The Pulse Stack</h2>
+      <p class="desc">Chasis de servidor 1U en 3 niveles donde la unidad central se convierte en una onda de telemetría y pulso vital de salud en cian eléctrico.</p>
+    </div>
+
+    <div class="card">
+      <div class="badge">Concepto 02</div>
+      <div class="preview-box">
+        <img src="../app/static/img/concept-2-sentinel-lens.png" alt="Concepto 2: Sentinel Lens">
+      </div>
+      <h2>The Sentinel Lens</h2>
+      <p class="desc">Vigilancia proactiva con lente de radar circular concéntrico, haz de escaneo y puntos de estado (verde, ámbar, cian) sobre rieles de rack.</p>
+    </div>
+
+    <div class="card">
+      <div class="badge">Concepto 03</div>
+      <div class="preview-box">
+        <img src="../app/static/img/concept-3-isometric-rw.png" alt="Concepto 3: Monograma Isométrico RW">
+      </div>
+      <h2>Monograma Isométrico "RW"</h2>
+      <p class="desc">Estructura arquitectónica 3D que entrelaza las letras R y W formadas por módulos de servidores con facetas iluminadas en azul cobalto e índigo.</p>
+    </div>
+
+    <div class="card">
+      <div class="badge">Concepto 04</div>
+      <div class="preview-box">
+        <img src="../app/static/img/concept-4-hex-sentinel.png" alt="Concepto 4: Hex Sentinel">
+      </div>
+      <h2>Hex Sentinel</h2>
+      <p class="desc">Prisma hexagonal estilo cloud-native con borde de vidrio esmerilado que aloja 3 servidores flotantes con barras de métricas (CPU, RAM, Disco).</p>
+    </div>
+  </main>
+</body>
+</html>

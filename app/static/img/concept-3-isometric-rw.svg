@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none">
+  <defs>
+    <linearGradient id="bgGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c0e1a"/>
+      <stop offset="100%" stop-color="#030408"/>
+    </linearGradient>
+
+    <linearGradient id="borderGlow3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+
+    <linearGradient id="topFace" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+
+    <linearGradient id="leftFace" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4338ca"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+
+    <linearGradient id="rightFace" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#312e81"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="neonCyan" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+
+    <filter id="glow3" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- App Icon Base Squircle -->
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bgGrad3)"/>
+  <rect x="8" y="8" width="240" height="240" rx="56" stroke="url(#borderGlow3)" stroke-width="2.5" stroke-opacity="0.8"/>
+
+  <!-- Subtle Isometric Grid in Background -->
+  <g stroke="#1e293b" stroke-width="1" stroke-opacity="0.3">
+    <line x1="28" y1="90" x2="128" y2="148"/>
+    <line x1="128" y1="148" x2="228" y2="90"/>
+    <line x1="28" y1="120" x2="128" y2="178"/>
+    <line x1="128" y1="178" x2="228" y2="120"/>
+  </g>
+
+  <!-- Isometric Server Block "R" (Left Column & Arch) -->
+  <g>
+    <!-- R - Vertical Backbone Spine (Left Column) -->
+    <!-- Top Face -->
+    <polygon points="68,66 94,51 114,63 88,77" fill="url(#topFace)"/>
+    <!-- Left Face -->
+    <polygon points="68,66 88,77 88,182 68,171" fill="url(#leftFace)"/>
+    <!-- Right Face -->
+    <polygon points="88,77 114,63 114,168 88,182" fill="url(#rightFace)"/>
+
+    <!-- Server Blade Grooves & LEDs on R Spine -->
+    <line x1="72" y1="92" x2="84" y2="99" stroke="#6366f1" stroke-width="1.5"/>
+    <line x1="72" y1="116" x2="84" y2="123" stroke="#6366f1" stroke-width="1.5"/>
+    <line x1="72" y1="140" x2="84" y2="147" stroke="#6366f1" stroke-width="1.5"/>
+
+    <circle cx="80" cy="97" r="1.5" fill="#10b981"/>
+    <circle cx="80" cy="121" r="1.5" fill="#06b6d4"/>
+    <circle cx="80" cy="145" r="1.5" fill="#38bdf8"/>
+
+    <!-- R - Upper Loop (Cross Beam) -->
+    <polygon points="114,63 150,42 166,51 130,73" fill="url(#topFace)"/>
+    <polygon points="130,73 166,51 166,96 130,118" fill="url(#rightFace)"/>
+    <polygon points="88,108 130,84 130,118 88,142" fill="url(#leftFace)"/>
+
+    <!-- R - Middle Crossbar Return -->
+    <polygon points="88,108 140,78 148,83 96,113" fill="url(#topFace)"/>
+
+    <!-- R - Diagonal Leg -->
+    <polygon points="112,126 126,118 168,178 152,187" fill="url(#rightFace)"/>
+    <polygon points="112,126 152,187 136,196 96,135" fill="url(#leftFace)"/>
+    <polygon points="126,118 142,109 168,178 152,187" fill="url(#topFace)"/>
+  </g>
+
+  <!-- Isometric Server Block "W" (Right Side) -->
+  <g>
+    <!-- W - Left Slant -->
+    <polygon points="152,106 168,97 182,154 166,163" fill="url(#leftFace)"/>
+    <polygon points="168,97 184,88 198,145 182,154" fill="url(#topFace)"/>
+
+    <!-- W - Center Valley & Peak -->
+    <polygon points="182,154 198,145 208,178 192,187" fill="url(#rightFace)"/>
+    <polygon points="192,187 208,178 220,132 204,141" fill="url(#leftFace)"/>
+
+    <!-- W - Right Slant -->
+    <polygon points="204,141 220,132 232,168 216,177" fill="url(#rightFace)"/>
+    <polygon points="220,132 234,124 246,160 232,168" fill="url(#topFace)"/>
+
+    <!-- Glowing Telemetry Traces Connecting R and W -->
+    <path d="M 114 63 L 150 42 L 184 88 L 198 145 L 208 178" 
+          stroke="url(#neonCyan)" stroke-width="2.5" stroke-linecap="round" fill="none" filter="url(#glow3)"/>
+    <circle cx="150" cy="42" r="3" fill="#ffffff" filter="url(#glow3)"/>
+    <circle cx="198" cy="145" r="3" fill="#ffffff" filter="url(#glow3)"/>
+  </g>
+</svg>

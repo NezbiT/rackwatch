@@ -49,7 +49,7 @@ Every path in this repository and why it exists. Use this when you onboard a sec
 | `static/css/app.css` | Aurora skin on top of Pico |
 | `static/js/app.js` | WebSocket client, filters, toasts, parallax |
 | `static/js/n8n-chat.js` | Official `@n8n/chat` widget |
-| `static/img/` | Logo + favicon (rack LEDs) |
+| `static/img/` | Logo + favicon (Hex Sentinel server rack) |
 
 ## Observability stack
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="app/static/img/logo.svg" width="96" height="96" alt="RackWatch Logo">
+</p>
+
 # RackWatch
 
 **Monitor y panel de control self-hosted** para **CasaOS**, **Proxmox** y **Docker**.
