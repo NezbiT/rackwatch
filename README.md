@@ -4,229 +4,200 @@
 
 # RackWatch
 
-**Monitor y panel de control self-hosted** para **CasaOS**, **Proxmox** y **Docker**.
+Self-hosted real-time homelab operations dashboard and automated recovery system for **Docker**, **CasaOS**, and **Proxmox**.
 
-Dashboard en vivo (CPU / RAM / disco, contenedores, ZFS, Home Assistant). Los servicios caídos pueden reiniciarse solos. Las alertas salen por Telegram, WhatsApp, **n8n**, webhook, MQTT y notify de HA. Incluye **chat con n8n** (y agentes OpenAI detrás de n8n) y una API de operador para automatizar el lab.
+RackWatch provides real-time telemetry (CPU, RAM, disk, network, container health, and ZFS pools), automated service healing with denylist protection, multi-channel alerting, and an AI-driven operator API.
 
-> **English docs:** [docs/](docs/) · Comparativa: [docs/COMPARE.md](docs/COMPARE.md) · n8n: [docs/N8N.md](docs/N8N.md)
-
----
-
-## Descripción
-
-RackWatch es la **sala de máquinas** del homelab:
-
-- Ves el estado en tiempo real (~3 s por WebSocket).
-- Actúas (reiniciar / arrancar / parar contenedores).
-- Alertas salen del servidor hacia tus canales.
-- **n8n** y **OpenAI** (vía n8n o clave en `.env`) pueden leer el snapshot y ejecutar acciones con `X-API-Key`.
-
-No es un launcher de apps (eso es Dashy), ni un comprobador HTTP puro (Uptime Kuma), ni un almacén histórico de métricas (Grafana/Netdata). **Complementa** esas piezas.
+> Spanish documentation is available at [README.es.md](README.es.md). Detailed architecture and technical guides are located in [docs/](docs/).
 
 ---
 
-## Comparativa rápida
+## 1. The Base Stack (`docker compose up -d`)
 
-| | RackWatch | Netdata | Grafana | Uptime Kuma | Dashy v4 |
-|---|---|---|---|---|---|
-| Estado live del host | Sí | Excelente | Vía Prom | No | Widgets |
-| Contenedores + reinicio | **Sí** | Ver | Ver | No | Enlaces |
-| Auto-restart + denylist | **Sí** | No | No | No | No |
-| ZFS / HA bridge | Sí | Parcial | Sí | No | No |
-| Gráficas históricas | Embed Grafana | Sí | **Especialista** | Uptime | No |
-| Checks HTTP/ping | Vía n8n | Sí | Alerting | **Especialista** | Status |
-| Homepage de apps | No | No | No | No | **Especialista** |
-| Chat / IA / n8n | **Sí** | No | No | No | No |
+RackWatch is deployed as a coordinated 5-container stack defined in `docker-compose.yml`. Each container handles a distinct role in metrics acquisition, persistence, visualization, or management:
 
-Detalle: **[docs/COMPARE.md](docs/COMPARE.md)**.
-
-**Stack típico recomendado**
-
-```
-Dashy          → portal / bookmarks
-Uptime Kuma    → “¿responde la URL pública?”
-Netdata/Prom   → métricas finas
-Grafana        → histórico (embebido en RackWatch)
-RackWatch      → operar + alertar + n8n/OpenAI
-```
+| Container / Image | Default Port | Why It Is Required |
+|---|---|---|
+| **`rackwatch`**<br>`rackwatch:0.1.0` *(FastAPI)* | `8080`<br>*(or `8180` on CasaOS)* | **Core System Engine:** Serves the web interface, REST API (`/api/v1`), and live WebSocket stream (~3s tick). Executes the collector loop, evaluates alert thresholds, and orchestrates container restarts. |
+| **`prometheus`**<br>`prom/prometheus:v3.2.1` | `9090` | **Time-Series Database (TSDB):** Stores high-resolution metric history (15-day retention by default) for CPU, memory, filesystem, and network I/O. Prevents high-frequency metrics from ballooning the local SQLite database. |
+| **`node-exporter`**<br>`prom/node-exporter:v1.9.1` | `9100` | **Host OS Metrics Collector:** Runs with direct read access to host virtual filesystems (`/:/host:ro`, `/proc`, `/sys`). Collects physical CPU load, memory utilization, disk partition saturation, and ZFS pool status. |
+| **`cadvisor`**<br>`gcr.io/cadvisor/cadvisor:v0.51.0` | `8081` | **Container Metrics Collector:** Analyzes real-time CPU and memory usage of each running Docker container on the host. Prometheus scrapes cAdvisor, allowing RackWatch to display individual container resource consumption. |
+| **`grafana`**<br>`grafana/grafana:11.6.0` | `3001`<br>*(or `3002` on CasaOS)* | **Historical Analytics & Deep Inspection:** Renders long-term performance graphs. Ships with pre-provisioned datasources and dashboards (`rackwatch-overview.json`) embedded directly into the `/graphs` tab. |
 
 ---
 
-## Funciones
+## 2. Host Requirements & Permissions
 
-| Función | Detalle |
-|---|---|
-| Dashboard live | WebSocket cada 3 s (configurable) |
-| Host | Prometheus + node-exporter, fallback `psutil` |
-| Contenedores | Docker socket + cAdvisor; start / stop / restart |
-| Auto-reinicio | Delay, cooldown, tope/hora, denylist / allow-list |
-| ZFS | `zpool` o textfile Prometheus |
-| Home Assistant | REST entities, sensores `sensor.rackwatch_*`, MQTT discovery, notify |
-| Alertas | Telegram, WhatsApp (CallMeBot o webhook), n8n, genérico, HA, MQTT |
-| Chat n8n | Widget oficial `@n8n/chat` + proxy `/api/v1/chat/n8n` |
-| API operador | Snapshot, alertas, ack, logs, hooks (`/api/v1/hooks/*`) |
-| Gráficas | Grafana iframe en `/graphs` |
-| i18n | EN / ES · tema dark / light |
-| Auth | Login opcional + `RACKWATCH_API_TOKEN` para máquinas |
+Before running the stack, verify that your host environment satisfies the following requirements:
 
----
+### Prerequisites Check
 
-## Instalación rápida (Docker)
+Run this command on your host to verify that Docker and Docker Compose are available:
 
 ```bash
-git clone https://github.com/NezbiT/rackwatch.git
-cd rackwatch
-cp .env.example .env
-# Edita .env — como mínimo:
-#   RACKWATCH_SECRET_KEY
-#   RACKWATCH_API_TOKEN
-#   RACKWATCH_PUBLIC_URL=http://TU_IP:8080
+docker --version && docker compose version
+```
 
+- **Linux Operating System:** Debian, Ubuntu Server, Arch Linux, CasaOS, Unraid, or Proxmox (LXC/VM).
+- **Docker Engine (24+) & Docker Compose v2:** Required to run the multi-container stack and manage service networks.
+
+### Docker Socket Access (`/var/run/docker.sock`)
+
+Both `rackwatch` and `cadvisor` require access to the Docker daemon socket:
+
+```bash
+ls -la /var/run/docker.sock
+```
+
+**Why it is required:**
+- **`cadvisor`:** Reads container metadata and cgroups directly from Docker to export container statistics.
+- **`rackwatch`:** Queries container states (`running`, `unhealthy`, `exited`) and performs auto-restart actions when a service fails.
+
+**Permission Modes:**
+- **Read-Write (`/var/run/docker.sock:/var/run/docker.sock:rw`) [Default]:** Allows RackWatch to restart failed containers automatically or on-demand via web UI / API.
+- **Read-Only (`/var/run/docker.sock:/var/run/docker.sock:ro`):** Restricts RackWatch to observer mode (telemetry only; cannot restart containers).
+
+---
+
+## 3. Quick Start & Installation
+
+### Step 1: Clone Repository
+
+```bash
+git clone https://github.com/NezbiT/rackwatch.git /opt/rackwatch
+cd /opt/rackwatch
+```
+
+### Step 2: Configure Environment & Generate Secrets
+
+Copy the environment template:
+
+```bash
+cp .env.example .env
+```
+
+Generate secure random tokens for session signing and API authentication:
+
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Edit `.env` and set the required variables:
+
+```env
+# Required security tokens
+RACKWATCH_SECRET_KEY=<generated_hex_string_32_bytes>
+RACKWATCH_API_TOKEN=<generated_hex_string_32_bytes>
+
+# Host endpoints
+RACKWATCH_PUBLIC_URL=http://<YOUR_SERVER_IP>:8080
+GRAFANA_PUBLIC_URL=http://<YOUR_SERVER_IP>:3001
+GRAFANA_ADMIN_PASSWORD=<strong_password>
+```
+
+> **Security Note:** Never commit `.env` to source control. It is ignored in `.gitignore`.
+
+### Step 3: Launch the Stack
+
+Start all 5 services in detached mode:
+
+```bash
 docker compose up -d --build
 ```
 
-Abre:
+### Step 4: Verify Health & Deployment
 
-| Servicio | URL |
-|---|---|
-| RackWatch | http://localhost:8080 |
-| Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3001 (admin / `changeme`) |
-
-CasaOS: App personalizada / Compose → pega `docker-compose.yml` y publica **8080**. Guía: [docs/INSTALL.md](docs/INSTALL.md).
-
-### Desarrollo local (sin Compose)
+Check container statuses and verify the RackWatch health endpoint:
 
 ```bash
-python3.12 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env
-./scripts/run-local.sh
+docker compose ps
+curl -fsS http://127.0.0.1:8080/healthz
 ```
 
----
+Expected output: `{"status":"ok"}`.
 
-## Dónde van las claves privadas (importante)
+### Service Ports Overview
 
-**Nunca subas `.env` a Git.** Está en `.gitignore`. Solo se versiona `.env.example` (plantilla vacía).
-
-| Secreto | Dónde ponerlo | Quién lo usa |
+| Service | Access URL | Notes |
 |---|---|---|
-| `RACKWATCH_SECRET_KEY` | `.env` | Cookie de sesión |
-| `RACKWATCH_API_TOKEN` | `.env` | n8n / OpenAI tools / webhooks → `/api/v1` |
-| `RACKWATCH_AUTH_USER` / `PASSWORD` | `.env` (opcional) | Login del dashboard |
-| `TELEGRAM_BOT_TOKEN` / `CHAT_ID` | `.env` o Settings UI | Alertas |
-| `WHATSAPP_*` | `.env` o Settings | Alertas |
-| `N8N_WEBHOOK_URL` | `.env` o Settings | Alertas → n8n |
-| `N8N_CHAT_WEBHOOK_URL` | `.env` o Settings | Chat Trigger (Embedded) |
-| `N8N_CHAT_AUTH_HEADER` | `.env` o Settings | Auth del Chat Trigger |
-| `HA_TOKEN` | `.env` o Settings | Home Assistant |
-| `MQTT_PASSWORD` | `.env` o Settings | Broker MQTT |
-| **`OPENAI_API_KEY`** | **Preferible en n8n Credentials**; opcional en `.env` | Agente LLM |
-| `OPENAI_BASE_URL` / `OPENAI_MODEL` | `.env` si RackWatch llama al modelo | OpenAI u compatible |
+| **RackWatch Web UI** | `http://<SERVER_IP>:8080` | Main homelab dashboard |
+| **Prometheus** | `http://<SERVER_IP>:9090` | PromQL metrics interface |
+| **Grafana** | `http://<SERVER_IP>:3001` | Embedded analytics (user: `admin`) |
 
-### Buenas prácticas
+*For CasaOS setups where ports 8080 and 3001 are already in use, apply the CasaOS overlay to use ports **8180** and **3002**:*
 
-1. Genera secretos fuertes:
-   ```bash
-   python -c "import secrets; print(secrets.token_hex(32))"
-   ```
-2. En CasaOS / Proxmox, monta `.env` o variables del compose; **no** pegues tokens en el README ni en issues.
-3. Si usas la UI de Settings, los overrides van a SQLite (`/data/rackwatch.db`); también son secretos locales.
-4. Rota cualquier clave que hayas pegado en un chat o captura de pantalla.
-
----
-
-## Integración n8n
-
-Dos URLs distintas:
-
-| Variable | Dirección | Uso |
-|---|---|---|
-| `N8N_WEBHOOK_URL` | RackWatch → n8n | Cada alerta (JSON fijo) |
-| `N8N_CHAT_WEBHOOK_URL` | Navegador → RackWatch → n8n | Widget de chat (Chat Trigger **Embedded**) |
-
-El navegador **no** habla con n8n a pelo: el proxy `/api/v1/chat/n8n` evita CORS y permite URLs Docker internas (`http://n8n:5678/...`).
-
-Guía paso a paso: **[docs/N8N.md](docs/N8N.md)**.
-
-### Que n8n / el agente controle el lab
-
-En el Agent de n8n, tools HTTP con header:
-
-```http
-X-API-Key: <RACKWATCH_API_TOKEN>
-```
-
-| Acción | Método | Ruta |
-|---|---|---|
-| Snapshot | GET | `/api/v1/snapshot` |
-| Alertas | GET | `/api/v1/alerts?range=24h` |
-| Ack | POST | `/api/v1/alerts/{id}/ack` |
-| Start/stop/restart | POST | `/api/v1/hooks/container` |
-| Crear alerta | POST | `/api/v1/hooks/alert` |
-
-```json
-{ "container": "plex", "action": "restart", "reason": "n8n agent", "force": false }
+```bash
+docker compose -f docker-compose.yml -f docker-compose.casaos.yml up -d --build
 ```
 
 ---
 
-## Integración OpenAI
+## 4. Optional External Integrations
 
-Hay **dos formas** (recomendamos la 1):
+RackWatch can be extended with external automation and notification tools depending on your homelab architecture:
 
-### 1. OpenAI dentro de n8n (recomendado)
+### 1. Telegram / WhatsApp / Generic Webhooks
+- **Why:** Delivers instant mobile alerts when a container dies, ZFS pools degrade, or resource thresholds exceed critical limits (>90%).
+- **Configuration:** Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (or `WHATSAPP_*` / `WEBHOOK_URL`) in `.env` or via **Settings** in the web UI.
 
-1. n8n → Credentials → **OpenAI API** → pega `OPENAI_API_KEY` **solo en n8n**.
-2. Chat Trigger → Agent / OpenAI node → tools HTTP hacia RackWatch (`X-API-Key`).
-3. En RackWatch solo configuras `N8N_CHAT_WEBHOOK_URL`.
+### 2. n8n (Automation & AI Operator)
+- **Why:** Enables bidirectional intelligence:
+  - **Outbound:** Dispatches standardized JSON alert envelopes to n8n workflows for complex routing (e.g., alert filtering, ticket creation).
+  - **Inbound AI Operator:** Powers the built-in `@n8n/chat` widget. An LLM agent in n8n can query `/api/v1/snapshot` and execute controlled recovery actions via the operator API using `X-API-Key`.
+- **Configuration:** Set `N8N_WEBHOOK_URL` and `N8N_CHAT_WEBHOOK_URL` in `.env`.
 
-Así la clave de OpenAI **no** vive en el contenedor de RackWatch.
+### 3. Home Assistant
+- **Why:** Provides two-way smart home synchronization:
+  - **Telemetry Push:** Publishes `sensor.rackwatch_*` entities (CPU, RAM, disk, status) to Home Assistant via REST API.
+  - **Notifications:** Forwards critical server alerts through Home Assistant's `notify` service.
+- **Configuration:** Set `HA_URL`, `HA_TOKEN`, and `HA_NOTIFY_SERVICE` in `.env`.
 
-### 2. Clave en RackWatch (`.env`)
+### 4. Mosquitto (MQTT Broker)
+- **Why:** Publishes real-time telemetry over MQTT topics and enables automatic discovery for Home Assistant without manual sensor definitions.
+- **Command to launch:**
+  ```bash
+  docker compose --profile mqtt up -d
+  ```
 
-Si más adelante el propio RackWatch llama al modelo:
+---
 
-```env
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
+## 5. Essential Management & API Commands
+
+### View Live Container Logs
+
+```bash
+docker compose logs -f rackwatch
 ```
 
-Compatible con proxies tipo Azure OpenAI / SpaceXAI / OpenRouter cambiando `OPENAI_BASE_URL`.
+### Inspect Live Telemetry Snapshot (CLI)
 
----
-
-## Pantallas
-
-```
-/              Dashboard live
-/services      Contenedores + log de reinicios
-/alerts        Historial de alertas
-/chat          Chat n8n (fullscreen)
-/graphs        Grafana
-/home-assistant
-/settings      Umbrales, canales, n8n, HA, MQTT
+```bash
+curl -s -H "X-API-Key: <YOUR_RACKWATCH_API_TOKEN>" http://127.0.0.1:8080/api/v1/snapshot | jq .
 ```
 
----
+### Trigger a Safe Container Restart via API
 
-## API
-
-- OpenAPI: `/docs` si `RACKWATCH_ENV=development`
-- Contrato: [docs/API.md](docs/API.md)
-- Alertas: [docs/ALERTS.md](docs/ALERTS.md)
-- Seguridad: [docs/SECURITY.md](docs/SECURITY.md)
-
----
-
-## Licencia
-
-MIT — ver [LICENSE](LICENSE).
+```bash
+curl -X POST http://127.0.0.1:8080/api/v1/hooks/container \
+  -H "X-API-Key: <YOUR_RACKWATCH_API_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"container": "plex", "action": "restart", "reason": "operator CLI"}'
+```
 
 ---
 
-## Español corto
+## Documentation
 
-Instala con Docker, rellena `.env` (nunca lo subas), apunta n8n (alertas + chat) y deja la clave de OpenAI en las **Credentials de n8n**. RackWatch es el panel para **ver y actuar** en tu lab; Grafana/Netdata/Kuma/Dashy siguen haciendo lo suyo. Más detalle en [docs/COMPARE](docs/COMPARE.md) y [docs/N8N.md](docs/N8N.md).
+- **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Installation Guide:** [docs/INSTALL.md](docs/INSTALL.md)
+- **REST & WebSocket API:** [docs/API.md](docs/API.md)
+- **Alerting Engine:** [docs/ALERTS.md](docs/ALERTS.md)
+- **n8n & AI Integration:** [docs/N8N.md](docs/N8N.md)
+- **Security Guide:** [docs/SECURITY.md](docs/SECURITY.md)
+- **Tool Comparison:** [docs/COMPARE.md](docs/COMPARE.md)
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
