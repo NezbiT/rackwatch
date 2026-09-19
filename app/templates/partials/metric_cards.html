@@ -9,27 +9,37 @@
   {% for h in hosts %}
   <article class="rw-gauge is-{{ h.status }}" data-host="{{ h.name }}">
     <header>
-      <span class="rw-pill is-{{ h.status }}">{{ t('status.' + h.status) if h.status in ['ok','warning','error','unknown'] else h.status }}</span>
-      <h3>{{ h.name }}</h3>
+      <div class="rw-gauge-title">
+        <span class="rw-pill is-{{ h.status }}">{{ t('status.' + h.status) if h.status in ['ok','warning','error','unknown'] else h.status }}</span>
+        <h3>{{ h.name }}</h3>
+      </div>
+      {% if h.load1 is not none %}
+      <span class="rw-gauge-meta mono">{{ t('metric.load', load=h.load1) }}</span>
+      {% endif %}
     </header>
     <dl>
-      <div>
+      <div class="rw-metric-stat">
         <dt>{{ t('metric.cpu') }}</dt>
-        <dd class="mono">{{ '%.0f'|format(h.cpu_percent) if h.cpu_percent is not none else '—' }}%</dd>
+        <dd class="mono" data-k="cpu">{{ '%.0f'|format(h.cpu_percent) if h.cpu_percent is not none else '—' }}<span class="rw-unit">%</span></dd>
         <div class="rw-meter" aria-hidden="true"><span style="width: {{ h.cpu_percent or 0 }}%"></span></div>
       </div>
-      <div>
+      <div class="rw-metric-stat">
         <dt>{{ t('metric.ram') }}</dt>
-        <dd class="mono">{{ '%.0f'|format(h.ram_percent) if h.ram_percent is not none else '—' }}%</dd>
+        <dd class="mono" data-k="ram">{{ '%.0f'|format(h.ram_percent) if h.ram_percent is not none else '—' }}<span class="rw-unit">%</span></dd>
         <div class="rw-meter" aria-hidden="true"><span style="width: {{ h.ram_percent or 0 }}%"></span></div>
       </div>
-      <div>
+      <div class="rw-metric-stat">
         <dt>{{ t('metric.disk') }}</dt>
-        <dd class="mono">{{ '%.0f'|format(h.disk_percent) if h.disk_percent is not none else '—' }}%</dd>
+        <dd class="mono" data-k="disk">{{ '%.0f'|format(h.disk_percent) if h.disk_percent is not none else '—' }}<span class="rw-unit">%</span></dd>
         <div class="rw-meter" aria-hidden="true"><span style="width: {{ h.disk_percent or 0 }}%"></span></div>
       </div>
     </dl>
-    <p class="rw-muted">{{ t('metric.source', source=h.source) }}</p>
+    <footer class="rw-gauge-foot">
+      <span class="rw-muted">{{ t('metric.source', source=h.source) }}</span>
+      {% if h.uptime_seconds %}
+      <span class="rw-muted mono">{{ '%.1f'|format(h.uptime_seconds / 86400) }}d up</span>
+      {% endif %}
+    </footer>
   </article>
   {% endfor %}
 {% endif %}

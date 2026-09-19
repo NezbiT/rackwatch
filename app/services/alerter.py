@@ -75,7 +75,7 @@ class Alerter:
     async def evaluate(self, snapshot: Snapshot) -> list[Alert]:
         candidates: list[dict[str, str]] = []
         for host in snapshot.hosts:
-            candidates.extend(self._from_host(host))
+            candidates.extend(self._from_host(host, snapshot.containers))
         for container in snapshot.containers:
             if container.severity == "error":
                 candidates.append(
@@ -97,6 +97,34 @@ class Alerter:
                         "service": container.name,
                         "title": f"{container.name} is {container.status or 'degraded'}",
                         "message": f"health={container.health or 'n/a'}",
+                    }
+                )
+            elif (
+                container.cpu_percent is not None
+                and container.cpu_percent >= self.settings.threshold_cpu_crit
+            ):
+                candidates.append(
+                    {
+                        "severity": "critical",
+                        "source": "container_cpu",
+                        "host": container.host,
+                        "service": container.name,
+                        "title": f"High CPU: {container.name} at {container.cpu_percent:.0f}%",
+                        "message": f"Container {container.name} CPU is critical: {container.cpu_percent:.1f}% >= {self.settings.threshold_cpu_crit:g}%",
+                    }
+                )
+            elif (
+                container.memory_percent is not None
+                and container.memory_percent >= self.settings.threshold_ram_crit
+            ):
+                candidates.append(
+                    {
+                        "severity": "critical",
+                        "source": "container_ram",
+                        "host": container.host,
+                        "service": container.name,
+                        "title": f"High RAM: {container.name} at {container.memory_percent:.0f}%",
+                        "message": f"Container {container.name} RAM is critical: {container.memory_percent:.1f}% >= {self.settings.threshold_ram_crit:g}%",
                     }
                 )
         for pool in snapshot.zfs:
@@ -142,7 +170,9 @@ class Alerter:
             created.append(alert)
         return created
 
-    def _from_host(self, host: HostMetrics) -> list[dict[str, str]]:
+    def _from_host(
+        self, host: HostMetrics, containers: list[ContainerMetrics] | None = None
+    ) -> list[dict[str, str]]:
         out: list[dict[str, str]] = []
         checks = (
             ("cpu", host.cpu_percent, self.settings.threshold_cpu_warn, self.settings.threshold_cpu_crit),
@@ -158,6 +188,37 @@ class Alerter:
                 sev = "warning"
             else:
                 continue
+
+            msg = f"threshold warn={warn:g} crit={crit:g}"
+            if containers and source == "cpu":
+                top_cpu = sorted(
+                    [c for c in containers if c.cpu_percent is not None and c.cpu_percent > 0],
+                    key=lambda c: c.cpu_percent or 0,
+                    reverse=True,
+                )[:3]
+                if top_cpu:
+                    msg += " · Top CPU: " + ", ".join(f"{c.name} ({c.cpu_percent:.1f}%)" for c in top_cpu)
+            elif containers and source == "ram":
+                top_ram = sorted(
+                    [
+                        c
+                        for c in containers
+                        if (c.memory_percent is not None and c.memory_percent > 0)
+                        or (c.memory_bytes and c.memory_bytes > 0)
+                    ],
+                    key=lambda c: c.memory_bytes or (c.memory_percent or 0),
+                    reverse=True,
+                )[:3]
+                if top_ram:
+                    def _fmt_mem(c: ContainerMetrics) -> str:
+                        if c.memory_bytes and c.memory_bytes > 1024 * 1024:
+                            mb = c.memory_bytes / (1024 * 1024)
+                            return f"{c.name} ({mb:.0f} MB)" if mb < 1024 else f"{c.name} ({mb/1024:.1f} GB)"
+                        if c.memory_percent:
+                            return f"{c.name} ({c.memory_percent:.0f}%)"
+                        return c.name
+                    msg += " · Top RAM: " + ", ".join(_fmt_mem(c) for c in top_ram)
+
             out.append(
                 {
                     "severity": sev,
@@ -165,7 +226,7 @@ class Alerter:
                     "host": host.name,
                     "service": source,
                     "title": f"{host.name} {source.upper()} at {value:.0f}%",
-                    "message": f"threshold warn={warn:g} crit={crit:g}",
+                    "message": msg,
                 }
             )
         return out
@@ -252,9 +313,13 @@ class Alerter:
         chat = self.settings.telegram_chat_id
         if not token or not chat:
             return False
-        text = f"RackWatch [{severity.upper()}]\n{title}\n{message}"
+        emoji = "🔴" if severity == "critical" else "⚠️" if severity == "warning" else "ℹ️"
+        text = f"{emoji} <b>RackWatch [{severity.upper()}]</b>\n<b>{title}</b>\n{message}"
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        res = await self._client.post(url, json={"chat_id": chat, "text": text})
+        res = await self._client.post(
+            url,
+            json={"chat_id": chat, "text": text, "parse_mode": "HTML"},
+        )
         await _log_delivery("telegram", res.is_success, res.status_code, text, res.text[:500])
         return res.is_success
 

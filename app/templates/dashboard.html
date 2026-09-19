@@ -55,13 +55,6 @@
     {% include "partials/metric_cards.html" %}
   </section>
 
-  <section class="rw-card" aria-labelledby="glances-heading">
-    <header class="rw-card-head">
-      <h2 id="glances-heading">Glances · host avanzado</h2>
-      <span class="rw-muted" id="glances-status"></span>
-    </header>
-    <div id="glances-panel" class="rw-output">Configura GLANCES_URL para ver red, swap, disco I/O, procesos y sensores.</div>
-  </section>
 
   <div class="rw-split">
     <section class="rw-card" aria-labelledby="containers-heading">
@@ -102,6 +95,14 @@
         <div id="alert-mini">
           {% include "partials/alert_list.html" %}
         </div>
+      </section>
+
+      <section class="rw-card" aria-labelledby="glances-heading">
+        <header class="rw-card-head">
+          <h2 id="glances-heading">Glances · Host</h2>
+          <span class="rw-muted" id="glances-status"></span>
+        </header>
+        <div id="glances-panel" class="rw-output">Configura GLANCES_URL para ver red, swap, disco I/O y procesos.</div>
       </section>
     </aside>
   </div>

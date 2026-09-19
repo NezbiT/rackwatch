@@ -23,19 +23,25 @@
         <td><span class="rw-pill is-{{ c.severity }}">{{ c.status }}{% if c.health %} · {{ c.health }}{% endif %}</span></td>
         <td class="mono">{{ c.name }}</td>
         <td class="rw-ellipsis">{{ c.image }}</td>
-        <td class="mono">{{ '%.1f'|format(c.cpu_percent) + '%' if c.cpu_percent is not none else '—' }}</td>
-        <td class="mono">{{ '%.0f'|format(c.memory_percent) + '%' if c.memory_percent is not none else '—' }}</td>
-        <td>
-          <button
-            class="outline secondary rw-tiny"
-            type="button"
-            data-restart="{{ c.name }}">
-            {{ t('action.restart') }}
-          </button>
-          <button class="outline secondary rw-tiny" type="button" data-container-logs="{{ c.name }}">{{ t('action.logs') }}</button>
-          <button class="outline secondary rw-tiny" type="button" data-container-inspect="{{ c.name }}">{{ t('action.inspect') }}</button>
+        <td class="mono">
+          {{ '%.1f'|format(c.cpu_percent) + '%' if c.cpu_percent is not none else '—' }}
+          {% if c.cpu_percent is not none %}
+          <div class="rw-cell-meter" aria-hidden="true"><span style="width: {{ [c.cpu_percent, 100]|min }}%"></span></div>
+          {% endif %}
         </td>
-      </tr>
+        <td class="mono">
+          {{ '%.0f'|format(c.memory_percent) + '%' if c.memory_percent is not none else '—' }}
+          {% if c.memory_percent is not none %}
+          <div class="rw-cell-meter" aria-hidden="true"><span style="width: {{ [c.memory_percent, 100]|min }}%"></span></div>
+          {% endif %}
+        </td>
+        <td>
+          <div class="rw-btn-group">
+            <button class="outline secondary rw-tiny" type="button" data-restart="{{ c.name }}">{{ t('action.restart') }}</button>
+            <button class="outline secondary rw-tiny" type="button" data-container-logs="{{ c.name }}">{{ t('action.logs') }}</button>
+            <button class="outline secondary rw-tiny" type="button" data-container-inspect="{{ c.name }}">{{ t('action.inspect') }}</button>
+          </div>
+        </td>
       {% endfor %}
     </tbody>
   </table>

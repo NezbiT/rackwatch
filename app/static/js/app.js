@@ -112,15 +112,37 @@
     const html = hosts
       .map((h) => {
         const src = t("metric.source", { source: h.source || "" });
-        const load = h.load1 != null ? " · " + t("metric.load", { load: h.load1 }) : "";
+        const load = h.load1 != null ? `<span class="rw-gauge-meta mono">${esc(t("metric.load", { load: h.load1 }))}</span>` : "";
+        const uptime = h.uptime_seconds ? `<span class="rw-muted mono">${(h.uptime_seconds / 86400).toFixed(1)}d up</span>` : "";
         return `<article class="rw-gauge is-${esc(h.status)}" data-host="${esc(h.name)}">
-        <header>${pill(h.status, statusLabel(h.status))}<h3>${esc(h.name)}</h3></header>
+        <header>
+          <div class="rw-gauge-title">
+            ${pill(h.status, statusLabel(h.status))}
+            <h3>${esc(h.name)}</h3>
+          </div>
+          ${load}
+        </header>
         <dl>
-          <div><dt>${esc(t("metric.cpu"))}</dt><dd class="mono" data-k="cpu">${fmtPct(h.cpu_percent)}</dd>${meter(h.cpu_percent)}</div>
-          <div><dt>${esc(t("metric.ram"))}</dt><dd class="mono" data-k="ram">${fmtPct(h.ram_percent)}</dd>${meter(h.ram_percent)}</div>
-          <div><dt>${esc(t("metric.disk"))}</dt><dd class="mono" data-k="disk">${fmtPct(h.disk_percent)}</dd>${meter(h.disk_percent)}</div>
+          <div class="rw-metric-stat">
+            <dt>${esc(t("metric.cpu"))}</dt>
+            <dd class="mono" data-k="cpu">${fmtPct(h.cpu_percent)}<span class="rw-unit">%</span></dd>
+            ${meter(h.cpu_percent)}
+          </div>
+          <div class="rw-metric-stat">
+            <dt>${esc(t("metric.ram"))}</dt>
+            <dd class="mono" data-k="ram">${fmtPct(h.ram_percent)}<span class="rw-unit">%</span></dd>
+            ${meter(h.ram_percent)}
+          </div>
+          <div class="rw-metric-stat">
+            <dt>${esc(t("metric.disk"))}</dt>
+            <dd class="mono" data-k="disk">${fmtPct(h.disk_percent)}<span class="rw-unit">%</span></dd>
+            ${meter(h.disk_percent)}
+          </div>
         </dl>
-        <p class="rw-muted">${esc(src)}${esc(load)}</p>
+        <footer class="rw-gauge-foot">
+          <span class="rw-muted">${esc(src)}</span>
+          ${uptime}
+        </footer>
       </article>`;
       })
       .join("");
@@ -145,18 +167,20 @@
     const body = rows
       .map((c) => {
         const label = c.health ? `${c.status} · ${c.health}` : c.status;
+        const cpuBar = c.cpu_percent != null ? `<div class="rw-cell-meter" aria-hidden="true"><span style="width:${Math.min(100, c.cpu_percent)}%"></span></div>` : "";
+        const memBar = c.memory_percent != null ? `<div class="rw-cell-meter" aria-hidden="true"><span style="width:${Math.min(100, c.memory_percent)}%"></span></div>` : "";
         return `<tr class="is-${esc(c.severity)}" data-name="${esc(c.name)}">
           <td>${pill(c.severity, label)}</td>
           <td class="mono">${esc(c.name)}</td>
           <td class="rw-ellipsis" title="${esc(c.image)}">${esc(c.image)}</td>
-          <td class="mono">${fmtPct(c.cpu_percent, 1)}</td>
-          <td class="mono">${c.memory_percent != null ? fmtPct(c.memory_percent, 0) : "—"}</td>
+          <td class="mono">${fmtPct(c.cpu_percent, 1)}${cpuBar}</td>
+          <td class="mono">${c.memory_percent != null ? fmtPct(c.memory_percent, 0) : "—"}${memBar}</td>
           <td>
-          <button class="outline secondary rw-tiny" type="button" data-restart="${esc(c.name)}">
-            ${esc(t("action.restart"))}
-          </button>
-          <button class="outline secondary rw-tiny" type="button" data-container-logs="${esc(c.name)}">${esc(t("action.logs"))}</button>
-          <button class="outline secondary rw-tiny" type="button" data-container-inspect="${esc(c.name)}">${esc(t("action.inspect"))}</button>
+            <div class="rw-btn-group">
+              <button class="outline secondary rw-tiny" type="button" data-restart="${esc(c.name)}">${esc(t("action.restart"))}</button>
+              <button class="outline secondary rw-tiny" type="button" data-container-logs="${esc(c.name)}">${esc(t("action.logs"))}</button>
+              <button class="outline secondary rw-tiny" type="button" data-container-inspect="${esc(c.name)}">${esc(t("action.inspect"))}</button>
+            </div>
           </td>
         </tr>`;
       })
