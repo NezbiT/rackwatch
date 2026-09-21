@@ -1,3 +1,10 @@
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/logo.svg" width="96" height="96" alt="RackWatch Logo"><br>
+  <a href="https://www.jsdelivr.com/package/gh/NezbiT/rackwatch"><img src="https://data.jsdelivr.com/v1/package/gh/NezbiT/rackwatch/badge" alt="jsDelivr"></a>
+  <a href="https://github.com/NezbiT/rackwatch/releases/latest"><img src="https://img.shields.io/github/v/release/NezbiT/rackwatch?color=blue" alt="Última versión"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-MIT-green.svg" alt="Licencia"></a>
+</p>
+
 # RackWatch (ES)
 
 La documentación principal (instalación, comparativa, secretos OpenAI/n8n) está en **[README.md](README.md)**.
@@ -150,6 +157,29 @@ Cada archivo de código lleva un docstring de módulo explicando para qué exist
 - [SECURITY_BUG_PERFORMANCE_ASSESSMENT.md](SECURITY_BUG_PERFORMANCE_ASSESSMENT.md) — Auditoría técnica de seguridad y rendimiento
 - [docs/SAAS.md](docs/SAAS.md) — hoja de ruta multi-tenant / SaaS online
 - [NezbiT/omarchy-rackwatch](https://github.com/NezbiT/omarchy-rackwatch) — Plugin para barra de estado en Omarchy
+
+---
+
+## Recursos CDN e Iconos (jsDelivr)
+
+Los logos y recursos vectoriales oficiales están distribuidos globalmente vía [jsDelivr CDN](https://www.jsdelivr.com/package/gh/NezbiT/rackwatch):
+
+- **Logo Hex Sentinel (SVG):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/logo.svg
+  ```
+- **Logo Hex Sentinel (PNG):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/logo.png
+  ```
+- **Favicon (SVG):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/favicon.svg
+  ```
+- **Recurso de concepto en alta resolución (SVG):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/concept-4-hex-sentinel.svg
+  ```
 
 ---
 

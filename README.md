@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="app/static/img/logo.svg" width="96" height="96" alt="RackWatch Logo">
+  <img src="https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/logo.svg" width="96" height="96" alt="RackWatch Logo"><br>
+  <a href="https://www.jsdelivr.com/package/gh/NezbiT/rackwatch"><img src="https://data.jsdelivr.com/v1/package/gh/NezbiT/rackwatch/badge" alt="jsDelivr"></a>
+  <a href="https://github.com/NezbiT/rackwatch/releases/latest"><img src="https://img.shields.io/github/v/release/NezbiT/rackwatch?color=blue" alt="Latest Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
 </p>
 
 # RackWatch
@@ -205,6 +208,29 @@ curl -X POST http://127.0.0.1:8080/api/v1/hooks/container \
 - **Security Assessment Report:** [SECURITY_BUG_PERFORMANCE_ASSESSMENT.md](SECURITY_BUG_PERFORMANCE_ASSESSMENT.md)
 - **Tool Comparison:** [docs/COMPARE.md](docs/COMPARE.md)
 - **Omarchy Desktop Widget:** [NezbiT/omarchy-rackwatch](https://github.com/NezbiT/omarchy-rackwatch)
+
+---
+
+## CDN Assets & Logos (jsDelivr)
+
+Official branding and vector assets are distributed globally via [jsDelivr CDN](https://www.jsdelivr.com/package/gh/NezbiT/rackwatch):
+
+- **Hex Sentinel Logo (SVG):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/logo.svg
+  ```
+- **Hex Sentinel Logo (PNG):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/logo.png
+  ```
+- **Favicon (SVG):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/favicon.svg
+  ```
+- **High-Res Concept Asset (SVG):**
+  ```text
+  https://cdn.jsdelivr.net/gh/NezbiT/rackwatch@v0.1.0/app/static/img/concept-4-hex-sentinel.svg
+  ```
 
 ---
 
