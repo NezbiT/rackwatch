@@ -24,6 +24,7 @@ La documentación principal (instalación, comparativa, secretos OpenAI/n8n) est
 | n8n | Webhook de alertas + widget Chat Trigger + API de operador |
 | Gráficas | Grafana embebido en la UI |
 | Home Assistant | REST + sensores `sensor.rackwatch_*` + notify + MQTT discovery |
+| Plugin para Omarchy | Widget en barra de estado y panel de control (`nezbit.rackwatch`) |
 | Auth | Login opcional + token de API para webhooks |
 
 Sin Rust en este MVP. Stack: **Python FastAPI**, **Jinja2 + HTMX + Pico.css**, **Prometheus**, **Grafana**, **Docker Compose**.
@@ -79,6 +80,28 @@ RackWatch entonces:
 - Publica MQTT discovery para que HA cree esos sensores sin YAML
 
 Guía: [docs/HOME_ASSISTANT.md](docs/HOME_ASSISTANT.md).
+
+---
+
+## Widget de escritorio para Omarchy (`nezbit.rackwatch`)
+
+Para monitorizar métricas del host, ver estado de contenedores, silenciar alertas y reiniciar servicios directamente desde la barra de estado de Linux en **Omarchy**:
+
+### Instalación mediante el gestor de plugins de Omarchy
+
+```bash
+omarchy plugin add https://github.com/NezbiT/omarchy-rackwatch.git --enable
+```
+
+### Instalación manual
+
+```bash
+git clone https://github.com/NezbiT/omarchy-rackwatch.git ~/.config/omarchy/plugins/nezbit.rackwatch
+omarchy plugin validate ~/.config/omarchy/plugins/nezbit.rackwatch
+omarchy plugin enable nezbit.rackwatch right
+```
+
+Repositorio y documentación del plugin: [NezbiT/omarchy-rackwatch](https://github.com/NezbiT/omarchy-rackwatch).
 
 ---
 
@@ -145,7 +168,9 @@ Cada archivo de código lleva un docstring de módulo explicando para qué exist
 - [docs/API.md](docs/API.md)
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
 - [docs/SECURITY.md](docs/SECURITY.md)
+- [SECURITY_BUG_PERFORMANCE_ASSESSMENT.md](SECURITY_BUG_PERFORMANCE_ASSESSMENT.md) — Auditoría técnica de seguridad y rendimiento
 - [docs/SAAS.md](docs/SAAS.md) — hoja de ruta multi-tenant / SaaS online
+- [NezbiT/omarchy-rackwatch](https://github.com/NezbiT/omarchy-rackwatch) — Plugin para barra de estado en Omarchy
 
 ---
 

@@ -6,7 +6,7 @@
 
 Self-hosted real-time homelab operations dashboard and automated recovery system for **Docker**, **CasaOS**, and **Proxmox**.
 
-RackWatch provides real-time telemetry (CPU, RAM, disk, network, container health, and ZFS pools), automated service healing with denylist protection, multi-channel alerting, and an AI-driven operator API.
+RackWatch provides real-time telemetry (CPU, RAM, disk, network, container health, and ZFS pools), automated service healing with denylist protection, multi-channel alerting, an AI-driven operator API, and a desktop status bar widget for **Omarchy**.
 
 > Spanish documentation is available at [README.es.md](README.es.md). Detailed architecture and technical guides are located in [docs/](docs/).
 
@@ -159,6 +159,20 @@ RackWatch can be extended with external automation and notification tools depend
   docker compose --profile mqtt up -d
   ```
 
+### 5. Omarchy Desktop Plugin (`nezbit.rackwatch`)
+- **Why:** Native Linux desktop status bar widget and dropdown control panel for [Omarchy Shell](https://github.com/NezbiT/omarchy-rackwatch). Displays live CPU/RAM usage, container statuses, and active alerts, allowing you to acknowledge alerts or restart containers directly from the desktop panel without opening the browser.
+- **Install via Omarchy Plugin Manager:**
+  ```bash
+  omarchy plugin add https://github.com/NezbiT/omarchy-rackwatch.git --enable
+  ```
+- **Manual Installation:**
+  ```bash
+  git clone https://github.com/NezbiT/omarchy-rackwatch.git ~/.config/omarchy/plugins/nezbit.rackwatch
+  omarchy plugin validate ~/.config/omarchy/plugins/nezbit.rackwatch
+  omarchy plugin enable nezbit.rackwatch right
+  ```
+- **Repository & Setup Guide:** [NezbiT/omarchy-rackwatch](https://github.com/NezbiT/omarchy-rackwatch)
+
 ---
 
 ## 5. Essential Management & API Commands
@@ -194,7 +208,9 @@ curl -X POST http://127.0.0.1:8080/api/v1/hooks/container \
 - **Alerting Engine:** [docs/ALERTS.md](docs/ALERTS.md)
 - **n8n & AI Integration:** [docs/N8N.md](docs/N8N.md)
 - **Security Guide:** [docs/SECURITY.md](docs/SECURITY.md)
+- **Security Assessment Report:** [SECURITY_BUG_PERFORMANCE_ASSESSMENT.md](SECURITY_BUG_PERFORMANCE_ASSESSMENT.md)
 - **Tool Comparison:** [docs/COMPARE.md](docs/COMPARE.md)
+- **Omarchy Desktop Widget:** [NezbiT/omarchy-rackwatch](https://github.com/NezbiT/omarchy-rackwatch)
 
 ---
 
