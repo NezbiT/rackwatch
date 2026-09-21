@@ -23,7 +23,6 @@ def test_services_and_settings_render(client):
     assert client.get("/services").status_code == 200
     assert client.get("/alerts").status_code == 200
     assert client.get("/graphs").status_code == 200
-    assert client.get("/home-assistant").status_code == 200
     assert client.get("/settings").status_code == 200
     assert client.get("/chat").status_code == 200
 
@@ -52,8 +51,8 @@ def test_settings_read_redacts_secrets(client):
     assert res.status_code == 200
     body = res.json()
     assert "threshold_cpu_warn" in body
-    assert "ha_token" in body
-    assert body["ha_token"] in {"", "***"}
+    assert "telegram_bot_token" in body
+    assert body["telegram_bot_token"] in {"", "***"}
 
 
 def test_container_logs_unknown(client):

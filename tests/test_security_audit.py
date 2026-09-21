@@ -2,12 +2,15 @@
 
 Verifies fixes for:
 1. Open redirect vulnerability in navigation/login.
-2. CSRF protection on forms and state-changing session endpoints.
-3. WebSocket authentication and Origin header (CSWSH) validation.
+2. CSRF protection on forms and state-changing session endpoints, preventing bypass with invalid API keys.
+3. WebSocket authentication and Origin header (CSWSH) validation including scheme, host, and port.
 4. Settings validation schema with bounds and URL scheme checks.
-5. Docker exec and file read/write limits, traversal, and sensitive path restrictions.
+5. Docker exec and file read/write limits, traversal, denylist, and self-modification restrictions.
 6. SQLite data retention policy, indexing, and WAL pragmas.
 7. Alerter cooldown persistence and WebSocket hub broadcast optimization.
+8. Time-range alert filtering in Hub.
+9. Administrative confirmation required for Docker force overrides.
+10. Collector concurrency fault tolerance with return_exceptions=True.
 """
 
 from __future__ import annotations
@@ -16,16 +19,17 @@ import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.database import async_session, cleanup_old_records
 from app.models import Alert, RestartEvent, WebhookDelivery
 from app.schemas import AlertOut, ContainerMetrics, Filters, HostMetrics, SettingsUpdate, Snapshot
 from app.security import (
+    api_key_matches,
     get_or_create_csrf_token,
     is_ws_authenticated,
     is_ws_origin_allowed,
@@ -84,7 +88,21 @@ def test_csrf_protected_endpoints(client: TestClient, monkeypatch):
     res = client.post("/logout")
     assert res.status_code == 403
 
-    # 2. State-changing POST with API token bypasses CSRF requirement
+    # 2. State-changing POST with INVALID API key must NOT bypass CSRF requirement
+    res_bad_api = client.post(
+        "/api/v1/alerts/test",
+        headers={"x-api-key": "invalid-garbage-key"},
+        json={"channel": "all", "message": "Test"},
+    )
+    assert res_bad_api.status_code == 401
+
+    res_bad_csrf_logout = client.post(
+        "/logout",
+        headers={"x-api-key": "invalid-garbage-key"},
+    )
+    assert res_bad_csrf_logout.status_code == 403
+
+    # 3. State-changing POST with VALID API token bypasses CSRF requirement
     res_api = client.post(
         "/api/v1/alerts/test",
         headers={"x-api-key": "test-token"},
@@ -92,8 +110,11 @@ def test_csrf_protected_endpoints(client: TestClient, monkeypatch):
     )
     assert res_api.status_code == 200
 
-    # 3. Enable auth so /login is not redirected to /
-    from app.config import get_settings
+    # 4. POST /prefs requires CSRF protection
+    prefs_res_no_csrf = client.post("/prefs", data={"lang": "es", "next": "/"})
+    assert prefs_res_no_csrf.status_code == 403
+
+    # 5. Enable auth so /login is not redirected to /
     settings = get_settings()
     monkeypatch.setattr(settings, "auth_user", "admin")
     monkeypatch.setattr(settings, "auth_password", "secret")
@@ -112,13 +133,21 @@ def test_websocket_origin_security():
     assert is_ws_origin_allowed("http://127.0.0.1:8080", "127.0.0.1:8080", settings) is True
     assert is_ws_origin_allowed("http://rackwatch.lan:8080", "rackwatch.lan:8080", settings) is True
 
-    # Blocked origins (CSWSH)
+    # Blocked origins - different port represents different origin!
+    assert is_ws_origin_allowed("http://rackwatch.lan:9999", "rackwatch.lan:8080", settings) is False
+    assert is_ws_origin_allowed("http://localhost:3000", "localhost:8080", settings) is False
+
+    # Blocked origins - CSWSH
     assert is_ws_origin_allowed("http://evil-attacker.com", "rackwatch.lan:8080", settings) is False
     assert is_ws_origin_allowed("https://malicious.org", "localhost:8080", settings) is False
 
+    # Scheme downgrade blocked
+    https_settings = Settings(_env_file=None, public_url="https://rackwatch.lan:8080")
+    assert is_ws_origin_allowed("http://rackwatch.lan:8080", "rackwatch.lan:8080", https_settings) is False
+    assert is_ws_origin_allowed("https://rackwatch.lan:8080", "rackwatch.lan:8080", https_settings) is True
+
 
 def test_websocket_authentication(monkeypatch):
-    from app.config import get_settings
     settings = get_settings()
     monkeypatch.setattr(settings, "auth_user", "admin")
     monkeypatch.setattr(settings, "auth_password", "secretpassword")
@@ -183,7 +212,7 @@ def test_settings_validation():
         SettingsUpdate(generic_webhook_url="ftp://servers.com/test")
 
     with pytest.raises(Exception):
-        SettingsUpdate(ha_url="http://")
+        SettingsUpdate(n8n_webhook_url="http://")
 
     # validate_settings_dict discards non-writable fields
     cleaned = validate_settings_dict({"secret_key": "hacked", "threshold_cpu_warn": "80"})
@@ -223,6 +252,10 @@ async def test_docker_control_safeguards():
     # 2. Denylist guards on exec
     ok, err = await ctl.exec("rackwatch", "ls")
     assert ok is False
+    assert "prohibited" in err
+
+    ok, err = await ctl.exec("prometheus", "ls")
+    assert ok is False
     assert "denylist" in err
 
     # 3. File write to rackwatch itself is prohibited even with force
@@ -242,6 +275,138 @@ async def test_docker_control_safeguards():
     ok, err = ctl._exec_sync("web", "bash -c whoami")
     assert ok is False
     assert "shell interpreters" in err
+
+
+def test_docker_force_admin_check(client: TestClient):
+    # Calling mutating endpoint with force=True but without session or override header fails with 403
+    res = client.post(
+        "/api/v1/containers/prometheus/restart?force=true",
+        headers={"x-api-key": "test-token"},
+    )
+    assert res.status_code == 403
+    assert "X-Force-Override" in res.json()["detail"]
+
+    # With X-Force-Override: true header, the force authorization check passes
+    res2 = client.post(
+        "/api/v1/containers/prometheus/restart?force=true",
+        headers={"x-api-key": "test-token", "x-force-override": "true"},
+    )
+    # The force guard passed; it returns 400 because docker socket is not real in test, but not 403
+    assert res2.status_code in {200, 400, 404}
+
+
+def test_hub_time_range_filter():
+    hub = Hub()
+    now = datetime.now(timezone.utc)
+    a_recent = AlertOut(
+        fingerprint="a1",
+        severity="warning",
+        source="cpu",
+        host="host1",
+        service="cpu",
+        title="High CPU",
+        created_at=now - timedelta(minutes=5),
+    )
+    a_medium = AlertOut(
+        fingerprint="a2",
+        severity="critical",
+        source="docker",
+        host="host1",
+        service="plex",
+        title="Plex down",
+        created_at=now - timedelta(hours=2),
+    )
+    a_old = AlertOut(
+        fingerprint="a3",
+        severity="warning",
+        source="disk",
+        host="host1",
+        service="disk",
+        title="Disk full",
+        created_at=now - timedelta(days=3),
+    )
+
+    snap = Snapshot(
+        ts=1.0,
+        instance="homelab",
+        hosts=[],
+        containers=[],
+        alerts=[a_recent, a_medium, a_old],
+        zfs=[],
+        summary={},
+    )
+
+    # 15m filter: only a_recent (5m old)
+    out_15m = hub.apply_filters(snap, Filters(time_range="15m"))
+    assert len(out_15m["alerts"]) == 1
+    assert out_15m["alerts"][0]["fingerprint"] == "a1"
+
+    # 1h filter: only a_recent
+    out_1h = hub.apply_filters(snap, Filters(time_range="1h"))
+    assert len(out_1h["alerts"]) == 1
+    assert out_1h["alerts"][0]["fingerprint"] == "a1"
+
+    # 6h filter: a_recent and a_medium (2h old)
+    out_6h = hub.apply_filters(snap, Filters(time_range="6h"))
+    assert len(out_6h["alerts"]) == 2
+    fps = [a["fingerprint"] for a in out_6h["alerts"]]
+    assert "a1" in fps and "a2" in fps
+
+    # 24h filter: a_recent and a_medium
+    out_24h = hub.apply_filters(snap, Filters(time_range="24h"))
+    assert len(out_24h["alerts"]) == 2
+
+    # 7d filter: all 3
+    out_7d = hub.apply_filters(snap, Filters(time_range="7d"))
+    assert len(out_7d["alerts"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_collector_gather_resilience():
+    from app.services.collector import Collector
+
+    prom = MagicMock()
+    prom.ready = AsyncMock(side_effect=RuntimeError("Prometheus is down"))
+    prom.host_metrics = AsyncMock(side_effect=RuntimeError("Prometheus query failed"))
+    prom.container_usage = AsyncMock(return_value={})
+
+    docker = MagicMock()
+    docker.ready = AsyncMock(return_value=True)
+    docker.list_containers = AsyncMock(return_value=[])
+
+    zfs = MagicMock()
+    zfs.pools = AsyncMock(side_effect=RuntimeError("ZFS is down"))
+
+    restarter = MagicMock()
+    restarter.evaluate = AsyncMock(return_value=[])
+
+    alerter = MagicMock()
+    alerter.evaluate = MagicMock(return_value=[])
+    alerter.bind = MagicMock()
+
+    mqtt = MagicMock()
+    mqtt.bind = MagicMock()
+    mqtt.publish_snapshot = MagicMock()
+    mqtt.ok = False
+
+    hub = Hub()
+    collector = Collector(
+        prom=prom,
+        docker=docker,
+        zfs=zfs,
+        restarter=restarter,
+        alerter=alerter,
+        mqtt=mqtt,
+        hub=hub,
+    )
+
+    # Collector tick should survive the component failure without raising uncaught exception
+    snap = await collector.tick()
+    assert snap is not None
+    assert snap.prometheus_ok is False
+    assert snap.docker_ok is True
+    await hub.publish(snap)
+    assert hub.latest is not None
 
 
 @pytest.mark.asyncio
@@ -312,7 +477,6 @@ async def test_hub_concurrent_broadcast():
         containers=[ContainerMetrics(id="c1", name="app", image="img", status="running", severity="ok")],
         alerts=[],
         zfs=[],
-        ha_entities=[],
         summary={},
     )
 

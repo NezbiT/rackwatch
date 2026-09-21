@@ -29,7 +29,7 @@ Every path in this repository and why it exists. Use this when you onboard a sec
 | `security.py` | Optional login + API token |
 | `routers/pages.py` | Jinja pages + HTMX restart + settings POST |
 | `routers/api.py` | `/api/v1` JSON |
-| `routers/webhooks.py` | Inbound n8n / HA hooks |
+| `routers/webhooks.py` | Inbound n8n hooks |
 | `routers/ws.py` | `/ws` live stream |
 | `services/collector.py` | 3s tick that fills the Hub |
 | `services/hub.py` | Per-socket filters + broadcast |
@@ -38,9 +38,8 @@ Every path in this repository and why it exists. Use this when you onboard a sec
 | `services/n8n_chat.py` | Same-origin proxy to n8n Chat Trigger |
 | `services/zfs.py` | `zpool` + PromQL fallback |
 | `services/restarter.py` | Delay, cooldown, hourly cap |
-| `services/alerter.py` | Telegram, WhatsApp, n8n, generic, HA, MQTT |
-| `services/homeassistant.py` | REST pull, state push, notify |
-| `services/mqtt_bridge.py` | Discovery + snapshot + last will |
+| `services/alerter.py` | Telegram, WhatsApp, n8n, generic, MQTT |
+| `services/mqtt_bridge.py` | Snapshot publication + last will |
 | `services/local_metrics.py` | psutil fallback when Prom is down |
 | `services/settings_store.py` | SQLite overrides allow-list |
 | `services/status.py` | Pure status helpers (unit-tested) |
@@ -81,7 +80,6 @@ Every path in this repository and why it exists. Use this when you onboard a sec
 | `docs/ARCHITECTURE.md` | Collector loop and failure modes |
 | `docs/API.md` | REST + WS contract |
 | `docs/INSTALL.md` | CasaOS, Proxmox, Unraid, proxy |
-| `docs/HOME_ASSISTANT.md` | REST, notify, MQTT discovery |
 | `docs/ALERTS.md` | Telegram / WhatsApp / n8n setup |
 | `docs/N8N.md` | Alert webhook + chat widget + operator tools |
 | `docs/COMPARE.md` | RackWatch vs Netdata / Grafana / Uptime Kuma / Dashy |

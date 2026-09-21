@@ -1,4 +1,4 @@
-"""Inbound webhooks (n8n, Home Assistant, generic automation).
+"""Inbound webhooks (n8n, generic automation).
 
 POST /api/v1/hooks/alert       create a RackWatch alert and fan it out
 POST /api/v1/hooks/restart     restart a container by name

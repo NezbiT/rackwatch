@@ -30,7 +30,7 @@ from app.schemas import (
     SettingsUpdate,
     Snapshot,
 )
-from app.security import require_api_token, require_read, require_session
+from app.security import has_session, require_api_token, require_read, require_session
 from app.services import settings_store
 from app.services.alerter import recent_alerts
 from app.services.restarter import recent_restarts
@@ -41,6 +41,19 @@ router = APIRouter(prefix="/api/v1", tags=["api"])
 def _collector_started(app) -> float:
     collector = getattr(app.state, "collector", None)
     return getattr(collector, "started_at", time.time())
+
+
+def _verify_force_allowed(request: Request, force: bool) -> None:
+    if not force:
+        return
+    # Force overrides of container protection policies require an active operator session
+    # or an explicit administrative confirmation header
+    override_header = request.headers.get("x-force-override") or request.headers.get("x-admin-force")
+    if not has_session(request) and override_header != "true":
+        raise HTTPException(
+            status_code=403,
+            detail="Bypassing container protection policies with force=True requires explicit administrative confirmation (X-Force-Override: true)",
+        )
 
 
 @router.get("/health", response_model=HealthOut)
@@ -54,7 +67,6 @@ async def health_check(request: Request) -> HealthOut:
         instance=settings.instance_name,
         prometheus=await app.state.prom.ready(),
         docker=docker_ready,
-        homeassistant=await app.state.ha.ready(),
         mqtt=app.state.mqtt.ok,
         uptime_seconds=max(0.0, time.time() - _collector_started(app)),
     )
@@ -131,7 +143,6 @@ _SECRET_SETTING_KEYS = {
     "api_token",
     "telegram_bot_token",
     "whatsapp_apikey",
-    "ha_token",
     "mqtt_password",
     "n8n_chat_auth_header",
 }
@@ -171,6 +182,7 @@ async def exec_container(
     _: Annotated[None, Depends(require_api_token)],
     force: bool = False,
 ):
+    _verify_force_allowed(request, force)
     ok, detail = await request.app.state.docker.exec(name, body.command, force=force)
     if not ok:
         status_code = 403 if "denylist" in str(detail) or "prohibited" in str(detail) else 400
@@ -193,6 +205,7 @@ async def read_container_file(
     _: Annotated[None, Depends(require_api_token)],
     force: bool = False,
 ):
+    _verify_force_allowed(request, force)
     ok, content = await request.app.state.docker.get_file(name, body.path, force=force)
     if not ok:
         status_code = 403 if "denylist" in str(content) or "restricted" in str(content) or "prohibited" in str(content) else 400
@@ -208,6 +221,7 @@ async def write_container_file(
     _: Annotated[None, Depends(require_api_token)],
     force: bool = False,
 ):
+    _verify_force_allowed(request, force)
     ok, detail = await request.app.state.docker.put_file(name, body.path, body.content, force=force)
     if not ok:
         status_code = 403 if "denylist" in str(detail) or "restricted" in str(detail) or "prohibited" in str(detail) else 400
@@ -241,6 +255,7 @@ async def update_settings(
 
 
 async def _mutate_container(request: Request, name: str, action: str, reason: str, force: bool) -> dict:
+    _verify_force_allowed(request, force)
     docker = request.app.state.docker
     method = {"start": docker.start, "stop": docker.stop, "restart": docker.restart}[action]
     ok, detail = await method(name, force=force)
@@ -318,15 +333,6 @@ async def test_alert(
         channels=channels,
     )
     return {"ok": True, "id": alert.id, "delivered_to": alert.delivered_to}
-
-
-@router.get("/ha/entities")
-async def ha_entities(
-    request: Request,
-    _: Annotated[None, Depends(require_read)],
-):
-    ha = request.app.state.ha
-    return await ha.entities()
 
 
 @router.api_route("/chat/n8n", methods=["GET", "POST"])

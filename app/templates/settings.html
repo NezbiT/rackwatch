@@ -147,28 +147,7 @@
     </fieldset>
 
     <fieldset>
-      <legend>{{ t('settings.ha_rest') }}</legend>
-      <label>
-        {{ t('settings.ha_url') }}
-        <input type="url" name="ha_url" value="{{ settings.ha_url }}" placeholder="http://homeassistant.local:8123">
-      </label>
-      <label>
-        {{ t('settings.ha_token') }}
-        <input type="password" name="ha_token" value="{{ settings.ha_token }}" autocomplete="off">
-      </label>
-      <label>
-        {{ t('settings.notify') }}
-        <input type="text" name="ha_notify_service" value="{{ settings.ha_notify_service }}" placeholder="notify.mobile_app_pixel">
-      </label>
-      <label>
-        {{ t('settings.pinned') }}
-        <input type="text" name="ha_pinned_entities" value="{{ settings.ha_pinned_entities }}" placeholder="sensor.living_temp,switch.office">
-        <small>{{ t('settings.pinned_help') }}</small>
-      </label>
-    </fieldset>
-
-    <fieldset>
-      <legend>{{ t('settings.ha_mqtt') }}</legend>
+      <legend>{{ t('settings.mqtt') }}</legend>
       <label>
         {{ t('settings.broker') }}
         <input type="text" name="mqtt_host" value="{{ settings.mqtt_host }}" placeholder="mosquitto">
@@ -196,7 +175,7 @@
     </header>
     <p class="rw-muted">{{ t('settings.test_help') }}</p>
     <div class="rw-test-row">
-      {% for ch in ['telegram', 'whatsapp', 'n8n', 'generic', 'homeassistant', 'all'] %}
+      {% for ch in ['telegram', 'whatsapp', 'n8n', 'generic', 'all'] %}
       <button type="button" class="secondary outline rw-tiny" data-test-channel="{{ ch }}">{{ t('settings.test', channel=ch) }}</button>
       {% endfor %}
       <button type="button" class="secondary outline rw-tiny" id="test-n8n-chat">{{ t('settings.test_chat') }}</button>

@@ -111,12 +111,10 @@ Same JSON POST. Use this for Slack incoming webhooks **only if** you transform t
 
 ---
 
-## Home Assistant
+## MQTT Broker
 
-See [HOME_ASSISTANT.md](HOME_ASSISTANT.md). Short version:
-
-- REST notify via `HA_NOTIFY_SERVICE`
-- MQTT topic `rackwatch/alerts`
+- MQTT topic `{MQTT_BASE_TOPIC}/alerts`
+- Publish alert envelopes to external MQTT subscribers.
 
 ---
 
@@ -137,6 +135,6 @@ That alert is stored **and** fanned out to every outbound channel.
 
 ## Testing without leaving the UI
 
-Settings page → **Test telegram / whatsapp / n8n / generic / homeassistant / all**.
+Settings page → **Test telegram / whatsapp / n8n / generic / all**.
 
 The button hits `POST /api/v1/alerts/test` using your browser session. Delivered channels are listed in the toast and on the Alerts page (`source=test`).

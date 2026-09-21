@@ -179,10 +179,9 @@ The compose bind-mounts `./data/textfile` into node-exporter. RackWatch also tri
 
 1. Dashboard shows a host card within 10 seconds (local fallback if Prometheus is still starting).
 2. Services page lists containers.
-3. Settings → **Test telegram / n8n / homeassistant** after you paste tokens.
+3. Settings → **Test telegram / n8n / webhooks** after you paste tokens.
 4. Optional chat: Chat Trigger (Embedded Chat) → paste production URL into **n8n chat webhook URL** → **Test chat**. Details: [N8N.md](N8N.md).
-4. Graphs page: if the iframe is blank, open `GRAFANA_PUBLIC_URL` once in the same browser (anonymous Viewer is on) and confirm `allow_embedding = true`.
-5. Home Assistant page explains itself until `HA_URL` + token are set.
+5. Graphs page: if the iframe is blank, open `GRAFANA_PUBLIC_URL` once in the same browser (anonymous Viewer is on) and confirm `allow_embedding = true`.
 
 ---
 

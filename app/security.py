@@ -2,7 +2,7 @@
 
 Homelab default is open-on-LAN (no AUTH_USER). Mutating API routes
 always require `RACKWATCH_API_TOKEN` when it is set, even if the UI
-is open — that is what inbound n8n / HA automations use.
+is open — that is what inbound n8n automations use.
 
 SaaS note: replace SessionMiddleware + form login with OIDC / Clerk
 and per-tenant API keys. Keep `require_api_token` as the machine
@@ -33,7 +33,7 @@ def verify_login(user: str, password: str, settings: Settings) -> bool:
     )
 
 
-def has_session(request: Request) -> bool:
+def has_session(request: Request | WebSocket) -> bool:
     return bool(request.session.get("uid"))
 
 
@@ -48,7 +48,7 @@ def is_signed_in(request: Request, settings: Settings) -> bool:
     return has_session(request)
 
 
-def _presented_api_key(request: Request, api_key: str | None) -> str:
+def _presented_api_key(request: Request | WebSocket, api_key: str | None) -> str:
     presented = api_key or ""
     auth = request.headers.get("Authorization", "")
     if auth.lower().startswith("bearer "):
@@ -139,10 +139,12 @@ async def require_csrf(request: Request) -> None:
     """Enforce CSRF token verification on state-changing session requests.
 
     Inspects both form body (csrf_token) and headers (X-CSRF-Token / X-CSRFToken).
+    Only requests with a verified, valid API token are immune from CSRF checks.
     """
-    # API token requests (X-API-Key / Bearer) are immune from CSRF by definition
-    auth_header = request.headers.get("authorization", "")
-    if request.headers.get("x-api-key") or auth_header.lower().startswith("bearer "):
+    # Only a valid, authentic API key bypasses CSRF checks
+    settings = get_settings()
+    presented_key = _presented_api_key(request, request.headers.get("x-api-key"))
+    if presented_key and api_key_matches(presented_key, settings):
         return
 
     presented = request.headers.get("x-csrf-token") or request.headers.get("x-csrftoken")
@@ -195,34 +197,58 @@ def safe_next(raw: str | None, fallback: str = "/") -> str:
     return cleaned
 
 
+def _parse_origin(url_str: str) -> tuple[str, str, int] | None:
+    try:
+        p = urlsplit(url_str.strip())
+        scheme = p.scheme.lower()
+        if scheme not in {"http", "https"}:
+            return None
+        host = p.hostname.lower() if p.hostname else ""
+        if not host:
+            return None
+        port = p.port or (443 if scheme == "https" else 80)
+        return (scheme, host, port)
+    except Exception:
+        return None
+
+
 def is_ws_origin_allowed(origin: str | None, host_header: str | None, settings: Settings) -> bool:
-    """Validate WebSocket Origin header against host and allowed origins to prevent CSWSH."""
+    """Validate WebSocket Origin header against scheme, host, and port to prevent CSWSH."""
     if not origin:
         return True
-    try:
-        parsed = urlsplit(origin)
-        origin_netloc = parsed.netloc.lower()
-        origin_host = parsed.hostname.lower() if parsed.hostname else ""
-    except Exception:
+    origin_tuple = _parse_origin(origin)
+    if origin_tuple is None:
+        return False
+    orig_scheme, orig_host, orig_port = origin_tuple
+
+    allowed_targets: set[tuple[str, str, int]] = set()
+
+    # 1. From settings.public_url
+    if settings.public_url:
+        pub_tuple = _parse_origin(settings.public_url)
+        if pub_tuple:
+            allowed_targets.add(pub_tuple)
+
+    # 2. From host_header
+    if host_header:
+        h_clean = host_header.strip().lower()
+        if ":" in h_clean:
+            h_host, h_port_str = h_clean.split(":", 1)
+            try:
+                h_port = int(h_port_str)
+                allowed_targets.add(("http", h_host, h_port))
+                allowed_targets.add(("https", h_host, h_port))
+            except ValueError:
+                pass
+        else:
+            allowed_targets.add(("http", h_clean, 80))
+            allowed_targets.add(("https", h_clean, 443))
+
+    # Reject if scheme is downgraded when public_url is https
+    if settings.public_url and settings.public_url.lower().startswith("https://") and orig_scheme != "https":
         return False
 
-    allowed_netlocs = set()
-    allowed_hosts = {"localhost", "127.0.0.1", "::1"}
-    if host_header:
-        allowed_netlocs.add(host_header.lower())
-        host_only = host_header.split(":", 1)[0].lower()
-        allowed_hosts.add(host_only)
-    if settings.public_url:
-        try:
-            pub = urlsplit(settings.public_url)
-            if pub.netloc:
-                allowed_netlocs.add(pub.netloc.lower())
-            if pub.hostname:
-                allowed_hosts.add(pub.hostname.lower())
-        except Exception:
-            pass
-
-    return origin_netloc in allowed_netlocs or origin_host in allowed_hosts
+    return (orig_scheme, orig_host, orig_port) in allowed_targets
 
 
 def is_ws_authenticated(ws: WebSocket, settings: Settings) -> bool:
@@ -248,4 +274,3 @@ def is_ws_authenticated(ws: WebSocket, settings: Settings) -> bool:
         return True
 
     return False
-

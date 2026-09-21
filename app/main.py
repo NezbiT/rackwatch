@@ -1,12 +1,7 @@
-"""RackWatch ASGI entrypoint.
+"""RackWatch application entry point.
 
-Lifespan starts the collector, MQTT bridge, and SQLite schema.
-HTTP routers: pages (Jinja), /api/v1, inbound webhooks, /ws.
-
-Run locally:
-    uvicorn app.main:app --reload --port 8080
-
-Prometheus scrapes GET /metrics (process + custom gauges).
+Run with:
+    uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 """
 
 from __future__ import annotations
@@ -29,7 +24,6 @@ from app.routers import api, pages, webhooks, ws
 from app.services.alerter import Alerter
 from app.services.collector import Collector
 from app.services.docker_ctl import DockerControl
-from app.services.homeassistant import HomeAssistant
 from app.services.glances import GlancesClient
 from app.services.hub import Hub
 from app.services.mqtt_bridge import MqttBridge
@@ -62,9 +56,8 @@ async def lifespan(app: FastAPI):
     docker = DockerControl(settings)
     zfs = ZfsCollector(prom)
     restarter = Restarter(settings, docker)
-    ha = HomeAssistant(settings)
     mqtt = MqttBridge(settings)
-    alerter = Alerter(settings, ha=ha, mqtt=mqtt)
+    alerter = Alerter(settings, mqtt=mqtt)
     n8n_chat = N8nChat()
     glances = GlancesClient(settings)
     collector = Collector(
@@ -74,7 +67,6 @@ async def lifespan(app: FastAPI):
         zfs=zfs,
         restarter=restarter,
         alerter=alerter,
-        ha=ha,
         mqtt=mqtt,
         glances=glances,
     )
@@ -86,7 +78,6 @@ async def lifespan(app: FastAPI):
     app.state.alerter = alerter
     app.state.n8n_chat = n8n_chat
     app.state.glances = glances
-    app.state.ha = ha
     app.state.mqtt = mqtt
     app.state.collector = collector
     app.state.started_at = time.time()
@@ -103,7 +94,6 @@ async def lifespan(app: FastAPI):
         mqtt.stop()
         docker.close()
         await prom.close()
-        await ha.close()
         await alerter.close()
         await n8n_chat.close()
         await glances.close()

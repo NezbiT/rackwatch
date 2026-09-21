@@ -10,11 +10,6 @@ def test_snapshot_accepts_api_token(client):
     assert res.status_code in (200, 503)
 
 
-def test_ha_entities_accepts_api_token(client):
-    res = client.get("/api/v1/ha/entities", headers={"X-API-Key": "test-token"})
-    assert res.status_code == 200
-
-
 def test_hooks_container_requires_token(client):
     res = client.post("/api/v1/hooks/container", json={"container": "plex", "action": "restart"})
     assert res.status_code == 401

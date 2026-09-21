@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import WebSocket
@@ -17,6 +18,14 @@ from fastapi import WebSocket
 from app.schemas import Filters, Snapshot
 
 log = logging.getLogger("rackwatch.hub")
+
+RANGE_SECONDS = {
+    "15m": 900,
+    "1h": 3600,
+    "6h": 21600,
+    "24h": 86400,
+    "7d": 604800,
+}
 
 
 class Client:
@@ -45,8 +54,14 @@ class Hub:
 
     def apply_filters(self, snapshot: Snapshot, filters: Filters) -> dict[str, Any]:
         """Return a JSON-ready snapshot reduced by the client's filters."""
-        # Fast-path for clients without active filter criteria
-        if not filters.host and not filters.service and not filters.status and not filters.severity:
+        has_criteria = bool(
+            filters.host
+            or filters.service
+            or filters.status
+            or filters.severity
+            or filters.time_range
+        )
+        if not has_criteria:
             base = snapshot.model_dump(mode="json")
             base["filters"] = filters.model_dump()
             return base
@@ -54,7 +69,6 @@ class Hub:
         hosts = snapshot.hosts
         containers = snapshot.containers
         alerts = snapshot.alerts
-        ha = snapshot.ha_entities
         zfs = snapshot.zfs
 
         if filters.host:
@@ -75,28 +89,31 @@ class Hub:
                 for a in alerts
                 if needle in a.service.lower() or needle in a.source.lower()
             ]
-            ha = [
-                e
-                for e in ha
-                if needle in e.entity_id.lower() or needle in e.name.lower()
-            ]
 
         if filters.status:
             hosts = [h for h in hosts if h.status == filters.status]
             containers = [c for c in containers if c.severity == filters.status]
             zfs = [z for z in zfs if z.status == filters.status]
-            ha = [e for e in ha if e.status == filters.status]
 
         if filters.severity:
             rank = {"info": 1, "warning": 2, "critical": 3}
             want = rank.get(filters.severity, 0)
             alerts = [a for a in alerts if rank.get(a.severity, 0) >= want]
 
+        if filters.time_range:
+            max_age = RANGE_SECONDS.get(filters.time_range)
+            if max_age is not None:
+                cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age)
+                alerts = [
+                    a for a in alerts
+                    if a.created_at is None
+                    or (a.created_at if a.created_at.tzinfo else a.created_at.replace(tzinfo=timezone.utc)) >= cutoff
+                ]
+
         payload = snapshot.model_dump(mode="json")
         payload["hosts"] = [h.model_dump(mode="json") for h in hosts]
         payload["containers"] = [c.model_dump(mode="json") for c in containers]
         payload["alerts"] = [a.model_dump(mode="json") for a in alerts]
-        payload["ha_entities"] = [e.model_dump(mode="json") for e in ha]
         payload["zfs"] = [z.model_dump(mode="json") for z in zfs]
         payload["filters"] = filters.model_dump()
         return payload
@@ -108,19 +125,16 @@ class Hub:
         if not targets:
             return
 
-        # Pre-calculate unfiltered dump once for efficiency
-        cached_unfiltered: dict[str, Any] | None = None
+        # Cache filtered payloads per filter key for efficiency
+        cache: dict[str, dict[str, Any]] = {}
 
         async def _send(client: Client) -> Client | None:
-            nonlocal cached_unfiltered
             try:
-                if not client.filters.host and not client.filters.service and not client.filters.status and not client.filters.severity:
-                    if cached_unfiltered is None:
-                        cached_unfiltered = snapshot.model_dump(mode="json")
-                    payload = dict(cached_unfiltered)
-                    payload["filters"] = client.filters.model_dump()
-                else:
+                filter_key = client.filters.model_dump_json()
+                payload = cache.get(filter_key)
+                if payload is None:
                     payload = self.apply_filters(snapshot, client.filters)
+                    cache[filter_key] = payload
 
                 await asyncio.wait_for(client.ws.send_json(payload), timeout=4.0)
                 return None

@@ -146,20 +146,14 @@ RackWatch can be extended with external automation and notification tools depend
   - **Inbound AI Operator:** Powers the built-in `@n8n/chat` widget. An LLM agent in n8n can query `/api/v1/snapshot` and execute controlled recovery actions via the operator API using `X-API-Key`.
 - **Configuration:** Set `N8N_WEBHOOK_URL` and `N8N_CHAT_WEBHOOK_URL` in `.env`.
 
-### 3. Home Assistant
-- **Why:** Provides two-way smart home synchronization:
-  - **Telemetry Push:** Publishes `sensor.rackwatch_*` entities (CPU, RAM, disk, status) to Home Assistant via REST API.
-  - **Notifications:** Forwards critical server alerts through Home Assistant's `notify` service.
-- **Configuration:** Set `HA_URL`, `HA_TOKEN`, and `HA_NOTIFY_SERVICE` in `.env`.
-
-### 4. Mosquitto (MQTT Broker)
-- **Why:** Publishes real-time telemetry over MQTT topics and enables automatic discovery for Home Assistant without manual sensor definitions.
+### 3. Mosquitto (MQTT Broker)
+- **Why:** Publishes real-time telemetry over MQTT topics for IoT dashboards and external event consumers.
 - **Command to launch:**
   ```bash
   docker compose --profile mqtt up -d
   ```
 
-### 5. Omarchy Desktop Plugin (`nezbit.rackwatch`)
+### 4. Omarchy Desktop Plugin (`nezbit.rackwatch`)
 - **Why:** Native Linux desktop status bar widget and dropdown control panel for [Omarchy Shell](https://github.com/NezbiT/omarchy-rackwatch). Displays live CPU/RAM usage, container statuses, and active alerts, allowing you to acknowledge alerts or restart containers directly from the desktop panel without opening the browser.
 - **Install via Omarchy Plugin Manager:**
   ```bash

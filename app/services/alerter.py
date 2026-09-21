@@ -1,4 +1,4 @@
-"""Outbound alerts: Telegram, WhatsApp, n8n, generic webhook, Home Assistant.
+"""Outbound alerts: Telegram, WhatsApp, n8n, generic webhook, MQTT.
 
 Payload shape (also documented in docs/ALERTS.md) is stable and is
 the contract n8n / future SaaS subscribers should parse:
@@ -43,17 +43,14 @@ SEVERITY_RANK = {"info": 1, "warning": 2, "critical": 3}
 
 
 class Alerter:
-    def __init__(self, settings: Settings, ha: Any = None, mqtt: Any = None) -> None:
+    def __init__(self, settings: Settings, mqtt: Any = None) -> None:
         self.settings = settings
-        self.ha = ha
         self.mqtt = mqtt
         self._last_sent: dict[str, float] = {}
         self._client = httpx.AsyncClient(timeout=8.0)
 
-    def bind(self, settings: Settings, ha: Any = None, mqtt: Any = None) -> None:
+    def bind(self, settings: Settings, mqtt: Any = None) -> None:
         self.settings = settings
-        if ha is not None:
-            self.ha = ha
         if mqtt is not None:
             self.mqtt = mqtt
 
@@ -278,7 +275,7 @@ class Alerter:
             "url": f"{self.settings.public_url.rstrip('/')}/alerts",
             "ts": int(time.time()),
         }
-        wanted = channels or ["telegram", "whatsapp", "n8n", "generic", "homeassistant", "mqtt"]
+        wanted = channels or ["telegram", "whatsapp", "n8n", "generic", "mqtt"]
 
         async def _dispatch_task(channel: str) -> tuple[str, bool]:
             ok = await self._dispatch(channel, payload, title, message, severity)
@@ -325,8 +322,6 @@ class Alerter:
                 return await self._post("n8n", self.settings.n8n_webhook_url, payload)
             if channel == "generic":
                 return await self._post("generic", self.settings.generic_webhook_url, payload)
-            if channel == "homeassistant" and self.ha:
-                return await self.ha.notify(title, message, severity, payload)
             if channel == "mqtt" and self.mqtt:
                 return self.mqtt.publish_alert(payload)
         except Exception as exc:

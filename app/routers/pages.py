@@ -164,7 +164,10 @@ async def set_prefs(
 
 
 @router.post("/prefs")
-async def set_prefs_post(request: Request):
+async def set_prefs_post(
+    request: Request,
+    _: Annotated[None, Depends(require_csrf)],
+):
     """JSON/form POST for the theme toggle (no full navigation)."""
     lang = None
     theme = None
@@ -298,19 +301,6 @@ async def chat_page(
         request,
         "chat.html",
         _ctx(request, live, nav="chat"),
-    )
-
-
-@router.get("/home-assistant", response_class=HTMLResponse)
-async def ha_page(
-    request: Request,
-    settings: Annotated[Settings, Depends(get_settings)],
-    _: Annotated[None, Depends(require_session)],
-):
-    live = await settings_store.merged()
-    return templates.TemplateResponse(
-        "homeassistant.html",
-        _ctx(request, live, nav="ha"),
     )
 
 

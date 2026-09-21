@@ -1,7 +1,7 @@
 """RackWatch application package.
 
 Self-hosted homelab monitor: Prometheus metrics, Docker restarts,
-webhook alerts, and Home Assistant bridge.
+webhook alerts, and MQTT telemetry.
 
 The public HTTP surface lives in `app.main:app`. Background work
 (collector, restarter, alerter, MQTT) is started from the FastAPI

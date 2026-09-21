@@ -87,20 +87,14 @@ A name matches if the fragment appears anywhere in the container name (case-inse
 
 ---
 
-## Home Assistant
+## MQTT Broker
 
 | Variable | Default |
 |---|---|
-| `HA_URL` | empty = disabled |
-| `HA_TOKEN` | empty |
-| `HA_PINNED_ENTITIES` | empty = auto 24 |
-| `HA_NOTIFY_SERVICE` | `notify.notify` |
 | `MQTT_HOST` | empty = disabled |
 | `MQTT_PORT` | `1883` |
 | `MQTT_USERNAME` / `MQTT_PASSWORD` | empty |
 | `MQTT_BASE_TOPIC` | `rackwatch` |
-| `MQTT_HA_DISCOVERY` | `true` |
-| `MQTT_HA_DISCOVERY_PREFIX` | `homeassistant` |
 
 ---
 

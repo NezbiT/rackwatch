@@ -6,7 +6,7 @@ La documentación principal (instalación, comparativa, secretos OpenAI/n8n) est
 - n8n (alertas + chat + API): [docs/N8N.md](docs/N8N.md)
 - Instalación detallada: [docs/INSTALL.md](docs/INSTALL.md)
 
-**Resumen:** RackWatch es el panel para **ver y actuar** en el homelab (Docker, ZFS, HA, alertas). Grafana/Netdata hacen histórico; Uptime Kuma sondea URLs; Dashy es el launcher. OpenAI conviene configurarlo en **Credentials de n8n**; las claves de RackWatch van solo en `.env` (nunca en Git).
+**Resumen:** RackWatch es el panel para **ver y actuar** en el homelab (Docker, ZFS, alertas). Grafana/Netdata hacen histórico; Uptime Kuma sondea URLs; Dashy es el launcher. OpenAI conviene configurarlo en **Credentials de n8n**; las claves de RackWatch van solo en `.env` (nunca en Git).
 
 ---
 
@@ -20,10 +20,9 @@ La documentación principal (instalación, comparativa, secretos OpenAI/n8n) est
 | ZFS | `zpool list` o textfile de node-exporter |
 | Filtros | Host, servicio, severidad, estado, rango de tiempo |
 | Auto-reinicio | Delay + cooldown + tope por hora + denylist |
-| Alertas | Telegram, WhatsApp, n8n, webhook, HA, MQTT |
+| Alertas | Telegram, WhatsApp, n8n, webhook, MQTT |
 | n8n | Webhook de alertas + widget Chat Trigger + API de operador |
 | Gráficas | Grafana embebido en la UI |
-| Home Assistant | REST + sensores `sensor.rackwatch_*` + notify + MQTT discovery |
 | Plugin para Omarchy | Widget en barra de estado y panel de control (`nezbit.rackwatch`) |
 | Auth | Login opcional + token de API para webhooks |
 
@@ -60,26 +59,6 @@ En CasaOS u otra máquina, cambia `localhost` por la IP del host y pon esa IP en
 5. Publica el puerto **8080**. Abre `http://<ip-casaos>:8080`.
 
 Proxmox y más detalle: [docs/INSTALL.md](docs/INSTALL.md).
-
----
-
-## Home Assistant en 4 líneas
-
-```env
-HA_URL=http://homeassistant.local:8123
-HA_TOKEN=eyJhbGciOi...
-HA_NOTIFY_SERVICE=notify.mobile_app_pixel
-MQTT_HOST=core-mosquitto
-```
-
-RackWatch entonces:
-
-- Muestra entidades HA en el dashboard
-- Escribe `sensor.rackwatch_cpu`, `_ram`, `_disk`, `_containers_down`, `_status`
-- Llama a tu servicio notify en cada alerta
-- Publica MQTT discovery para que HA cree esos sensores sin YAML
-
-Guía: [docs/HOME_ASSISTANT.md](docs/HOME_ASSISTANT.md).
 
 ---
 

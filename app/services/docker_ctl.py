@@ -139,6 +139,8 @@ class DockerControl:
         return await asyncio.to_thread(self._action_sync, name_or_id, force, "stop")
 
     async def exec(self, name_or_id: str, command: str, *, force: bool = False) -> tuple[bool, dict[str, Any] | str]:
+        if "rackwatch" in name_or_id.lower():
+            return False, "execution inside rackwatch container is prohibited"
         if not force and self.is_denied(name_or_id):
             return False, f"{name_or_id} is on the denylist (override requires force=True)"
         try:

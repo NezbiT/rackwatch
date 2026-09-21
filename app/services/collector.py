@@ -4,11 +4,11 @@ Every `refresh_seconds` (default 3):
 1. Reload setting overrides from SQLite.
 2. Pull Prometheus hosts + cAdvisor usage.
 3. List Docker containers (merge usage).
-4. Read ZFS + Home Assistant.
+4. Read ZFS.
 5. Fall back to psutil if Prometheus is empty.
 6. Auto-restart failed services.
 7. Evaluate and fan-out alerts.
-8. Mirror summary into HA (REST) and MQTT.
+8. Mirror summary into MQTT.
 9. Broadcast the snapshot on the WebSocket hub.
 
 The loop is cancelled from FastAPI lifespan on shutdown.
@@ -26,7 +26,6 @@ from app.schemas import Snapshot
 from app.services import settings_store
 from app.services.alerter import Alerter, recent_alerts
 from app.services.docker_ctl import DockerControl
-from app.services.homeassistant import HomeAssistant
 from app.services.hub import Hub
 from app.services.local_metrics import read_local_host
 from app.services.mqtt_bridge import MqttBridge
@@ -47,7 +46,6 @@ class Collector:
         zfs: ZfsCollector,
         restarter: Restarter,
         alerter: Alerter,
-        ha: HomeAssistant,
         mqtt: MqttBridge,
         glances=None,
     ) -> None:
@@ -57,7 +55,6 @@ class Collector:
         self.zfs = zfs
         self.restarter = restarter
         self.alerter = alerter
-        self.ha = ha
         self.mqtt = mqtt
         self.glances = glances
         self.started_at = time.time()
@@ -113,41 +110,66 @@ class Collector:
         self.prom.settings = settings
         self.docker.settings = settings
         self.restarter.settings = settings
-        self.alerter.bind(settings, self.ha, self.mqtt)
-        self.ha.bind(settings)
+        self.alerter.bind(settings, self.mqtt)
         self.mqtt.bind(settings)
 
-        prom_ok, docker_ok, ha_ok = await asyncio.gather(
+        # Check backend readiness concurrently with exception isolation
+        ready_results = await asyncio.gather(
             self.prom.ready(),
             self.docker.ready(),
-            self.ha.ready(),
+            return_exceptions=True,
         )
+        prom_ok = bool(ready_results[0]) if isinstance(ready_results[0], bool) else False
+        docker_ok = bool(ready_results[1]) if isinstance(ready_results[1], bool) else False
 
         async def _fetch_hosts():
-            return await self.prom.hosts() if prom_ok else []
+            try:
+                return await self.prom.hosts() if prom_ok else []
+            except Exception as exc:
+                log.debug("Failed fetching Prometheus hosts: %s", exc)
+                return []
 
         async def _fetch_usage():
-            return await self.prom.container_usage() if prom_ok else {}
+            try:
+                return await self.prom.container_usage() if prom_ok else {}
+            except Exception as exc:
+                log.debug("Failed fetching container usage: %s", exc)
+                return {}
 
         async def _fetch_zfs():
-            return await self.zfs.pools()
-
-        async def _fetch_ha():
-            return await self.ha.entities() if ha_ok else []
+            try:
+                return await self.zfs.pools()
+            except Exception as exc:
+                log.debug("Failed fetching ZFS pools: %s", exc)
+                return []
 
         async def _fetch_glances():
-            return await self.glances.summary() if self.glances else {}
+            try:
+                return await self.glances.summary() if self.glances else {}
+            except Exception as exc:
+                log.debug("Failed fetching Glances summary: %s", exc)
+                return {}
 
-        # Fetch telemetry metrics concurrently
-        hosts, usage, zfs, ha_entities, glances_data = await asyncio.gather(
+        # Fetch telemetry metrics concurrently with return_exceptions=True
+        # so failure of any single provider does not abort the entire collection cycle
+        metrics_results = await asyncio.gather(
             _fetch_hosts(),
             _fetch_usage(),
             _fetch_zfs(),
-            _fetch_ha(),
             _fetch_glances(),
+            return_exceptions=True,
         )
 
-        containers = await self.docker.list_containers(usage)
+        hosts = metrics_results[0] if isinstance(metrics_results[0], list) else []
+        usage = metrics_results[1] if isinstance(metrics_results[1], dict) else {}
+        zfs = metrics_results[2] if isinstance(metrics_results[2], list) else []
+        glances_data = metrics_results[3] if isinstance(metrics_results[3], dict) else {}
+
+        containers = []
+        try:
+            containers = await self.docker.list_containers(usage)
+        except Exception as exc:
+            log.debug("Failed listing containers: %s", exc)
 
         if not hosts:
             hosts = [read_local_host(settings)]
@@ -158,35 +180,35 @@ class Collector:
             instance=settings.instance_name,
             prometheus_ok=prom_ok,
             docker_ok=docker_ok,
-            ha_ok=ha_ok,
             mqtt_ok=self.mqtt.ok,
             hosts=hosts,
             containers=containers,
             zfs=zfs,
-            ha_entities=ha_entities,
             alerts=[],
             summary=summary,
             glances=glances_data,
         )
 
-        await self.restarter.evaluate(containers)
-        await self.alerter.evaluate(snapshot)
-        snapshot.alerts = await recent_alerts(limit=40, time_range="6h")
+        try:
+            await self.restarter.evaluate(containers)
+        except Exception as exc:
+            log.debug("Restarter evaluation failed: %s", exc)
 
-        # Best-effort mirrors — never fail the tick.
-        async def _mirror_ha():
-            try:
-                await self.ha.publish_snapshot(snapshot)
-            except Exception:
-                log.debug("HA publish failed", exc_info=True)
+        try:
+            await self.alerter.evaluate(snapshot)
+        except Exception as exc:
+            log.debug("Alerter evaluation failed: %s", exc)
 
-        async def _mirror_mqtt():
-            try:
-                self.mqtt.publish_snapshot(snapshot)
-            except Exception:
-                log.debug("MQTT publish failed", exc_info=True)
+        try:
+            snapshot.alerts = await recent_alerts(limit=40, time_range="6h")
+        except Exception as exc:
+            log.debug("Failed retrieving recent alerts: %s", exc)
 
-        await asyncio.gather(_mirror_ha(), _mirror_mqtt())
+        # Best-effort mirror to MQTT — never fail the tick
+        try:
+            self.mqtt.publish_snapshot(snapshot)
+        except Exception:
+            log.debug("MQTT publish failed", exc_info=True)
 
         return snapshot
 

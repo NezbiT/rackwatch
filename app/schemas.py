@@ -60,18 +60,6 @@ class ZfsPool(BaseModel):
     source: str = "none"
 
 
-class HAEntity(BaseModel):
-    entity_id: str
-    name: str = ""
-    state: str = ""
-    unit: str = ""
-    domain: str = ""
-    last_changed: str = ""
-    friendly: str = ""
-    icon: str = ""
-    status: Status = "ok"
-
-
 class AlertOut(BaseModel):
     id: int | None = None
     created_at: datetime | None = None
@@ -115,12 +103,10 @@ class Snapshot(BaseModel):
     instance: str
     prometheus_ok: bool = False
     docker_ok: bool = False
-    ha_ok: bool = False
     mqtt_ok: bool = False
     hosts: list[HostMetrics] = Field(default_factory=list)
     containers: list[ContainerMetrics] = Field(default_factory=list)
     zfs: list[ZfsPool] = Field(default_factory=list)
-    ha_entities: list[HAEntity] = Field(default_factory=list)
     alerts: list[AlertOut] = Field(default_factory=list)
     summary: dict[str, Any] = Field(default_factory=dict)
     glances: dict[str, Any] = Field(default_factory=dict)
@@ -182,10 +168,6 @@ class SettingsUpdate(BaseModel):
     generic_webhook_url: str | None = Field(default=None, max_length=512)
     alert_cooldown_seconds: int | None = Field(default=None, ge=0, le=86400)
     alert_min_severity: Literal["info", "warning", "critical"] | None = None
-    ha_url: str | None = Field(default=None, max_length=512)
-    ha_token: str | None = Field(default=None, max_length=512)
-    ha_pinned_entities: str | None = Field(default=None, max_length=1000)
-    ha_notify_service: str | None = Field(default=None, max_length=256)
     mqtt_host: str | None = Field(default=None, max_length=256)
     mqtt_port: int | None = Field(default=None, ge=1, le=65535)
     mqtt_username: str | None = Field(default=None, max_length=128)
@@ -201,7 +183,6 @@ class SettingsUpdate(BaseModel):
         "n8n_webhook_url",
         "n8n_chat_webhook_url",
         "generic_webhook_url",
-        "ha_url",
         "grafana_public_url",
         mode="before",
     )
@@ -237,7 +218,7 @@ class ContainerHookIn(BaseModel):
 
 
 class AlertTestRequest(BaseModel):
-    channel: Literal["telegram", "whatsapp", "n8n", "generic", "homeassistant", "all"] = "all"
+    channel: Literal["telegram", "whatsapp", "n8n", "generic", "all"] = "all"
     message: str = "RackWatch test alert"
 
 
@@ -258,6 +239,5 @@ class HealthOut(BaseModel):
     instance: str
     prometheus: bool
     docker: bool
-    homeassistant: bool
     mqtt: bool
     uptime_seconds: float

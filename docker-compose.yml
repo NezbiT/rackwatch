@@ -121,7 +121,7 @@ services:
       - --housekeeping_interval=15s
       - --docker_only=true
 
-  # Optional MQTT broker for Home Assistant discovery.
+  # Optional MQTT broker for external event subscribers and telemetry.
   # Start with: docker compose --profile mqtt up -d
   mosquitto:
     image: eclipse-mosquitto:2.0

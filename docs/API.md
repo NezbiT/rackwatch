@@ -41,12 +41,10 @@ Latest collector tick. Shape: `app.schemas.Snapshot`.
   "instance": "homelab",
   "prometheus_ok": true,
   "docker_ok": true,
-  "ha_ok": true,
   "mqtt_ok": false,
   "hosts": [],
   "containers": [],
   "zfs": [],
-  "ha_entities": [],
   "alerts": [],
   "summary": { "cpu": 12.4, "ram": 41.0, "disk": 33.2, "overall": "ok" }
 }
@@ -67,10 +65,6 @@ Last N lines of Docker logs for that container (timestamps on). 404 if Docker ca
 ### `GET /api/v1/settings`
 
 Operator overrides (thresholds, denylist, webhook URLs). Secret values are `***`.
-
-### `GET /api/v1/ha/entities`
-
-Live HA state list (same objects the dashboard renders).
 
 ---
 
@@ -100,7 +94,7 @@ Marks the row acknowledged. Does not resolve the underlying condition.
 { "channel": "telegram", "message": "hello" }
 ```
 
-`channel`: `telegram` | `whatsapp` | `n8n` | `generic` | `homeassistant` | `all`
+`channel`: `telegram` | `whatsapp` | `n8n` | `generic` | `all`
 
 ---
 
@@ -108,14 +102,14 @@ Marks the row acknowledged. Does not resolve the underlying condition.
 
 ### `POST /api/v1/hooks/alert`
 
-n8n, HA automations, or the future SaaS ingest create a RackWatch alert and fan it out to every configured channel.
+n8n or external automations create a RackWatch alert and fan it out to every configured channel.
 
 ```json
 {
   "title": "UPS on battery",
   "message": "5 minutes remaining",
   "severity": "warning",
-  "source": "homeassistant",
+  "source": "ups",
   "host": "lab",
   "service": "ups"
 }

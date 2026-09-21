@@ -11,11 +11,10 @@ Comparativa orientada a **homelab / CasaOS / Proxmox / Docker**. RackWatch no su
 | Contenedores Docker | Sí + reinicio | Sí (vista) | Vía cAdvisor | No | Enlaces |
 | Auto-reinicio con denylist | **Sí** | No | No | No | No |
 | ZFS health | Sí | Plugins | Prom/textfile | No | No |
-| Home Assistant | REST + MQTT + notify | No nativo | Sí (datasource) | No | Widgets |
 | Historial / gráficas profundas | Embed Grafana | Sí | **Especialista** | Sí (uptime) | No |
 | Monitor HTTP/TCP/DNS/ping | No (vía n8n) | Sí | Alerting | **Especialista** | Status dots |
 | Homepage de apps (launcher) | No | No | No | No | **Especialista** |
-| Alertas multi-canal | TG / WA / n8n / HA / MQTT | Sí | Alertmanager | Email/TG/Discord… | No (solo status) |
+| Alertas multi-canal | TG / WA / n8n / MQTT / webhooks | Sí | Alertmanager | Email/TG/Discord… | No (solo status) |
 | API máquina + webhooks | `/api/v1` + hooks | API propia | HTTP API | API | Limitada |
 | Chat / automatización IA | **n8n Chat + API operador** | No | No | No | No |
 | OpenAI / agentes | Vía n8n (y clave en `.env`) | No | Plugins | No | No |
@@ -28,7 +27,7 @@ Comparativa orientada a **homelab / CasaOS / Proxmox / Docker**. RackWatch no su
 ### Netdata
 - Observabilidad de host en tiempo real, casi cero config.
 - Muchas métricas, bajo esfuerzo.
-- **No** reinicia contenedores ni orquesta HA/n8n como RackWatch.
+- **No** reinicia contenedores ni orquesta n8n como RackWatch.
 
 ### Grafana
 - El estándar para paneles históricos y PromQL.

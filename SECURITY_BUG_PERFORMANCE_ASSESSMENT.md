@@ -59,7 +59,7 @@ All vulnerabilities have been resolved, hardening measures implemented, and comp
 - **Remediation:**
   - Introduced the Pydantic schema `SettingsUpdate` in `app/schemas.py`.
   - Constrained all numeric settings (e.g., CPU/RAM/Disk thresholds between `0.0` and `100.0`, `refresh_seconds >= 1`, `db_retention_days` between `1` and `3650`).
-  - Added URL scheme validators restricting webhook URLs (`ha_url`, `n8n_webhook_url`, `whatsapp_webhook_url`, `generic_webhook_url`, `grafana_public_url`) exclusively to `http` or `https` with valid network hostnames.
+  - Added URL scheme validators restricting webhook URLs (`n8n_webhook_url`, `whatsapp_webhook_url`, `generic_webhook_url`, `grafana_public_url`) exclusively to `http` or `https` with valid network hostnames.
   - Integrated `validate_settings_dict` into `settings_store.save_overrides` and added `@router.patch("/api/v1/settings")` for API-driven configuration.
 
 ### 2.5. Docker Exec & File Safeguards
@@ -84,8 +84,8 @@ All vulnerabilities have been resolved, hardening measures implemented, and comp
 ## 3. Performance & Reliability Optimizations
 
 ### 3.1. Collector Concurrency
-- **Previous State:** In `Collector.tick()`, Prometheus host discovery, container usage calculations, ZFS pool interrogation, Home Assistant entity polling, and Glances summaries were executed sequentially.
-- **Optimized State:** Refactored `Collector.tick()` to gather all independent telemetry sources concurrently using `asyncio.gather()`. External mirrors (`ha.publish_snapshot` and `mqtt.publish_snapshot`) are dispatched in parallel as best-effort tasks, significantly reducing collector tick duration.
+- **Previous State:** In `Collector.tick()`, Prometheus host discovery, container usage calculations, ZFS pool interrogation, and Glances summaries were executed sequentially. Single task failures would abort the entire tick cycle.
+- **Optimized State:** Refactored `Collector.tick()` to gather all independent telemetry sources concurrently using `asyncio.gather(..., return_exceptions=True)`. Individual component failures are isolated so that snapshots are still reliably published. External mirror `mqtt.publish_snapshot` is dispatched concurrently as a best-effort task.
 
 ### 3.2. WebSocket Hub Broadcast & Payload Caching
 - **Previous State:** The WebSocket Hub serialized the full snapshot independently for every connected client in a sequential loop. A slow or stalled WebSocket client could block the entire collector loop.
@@ -95,7 +95,7 @@ All vulnerabilities have been resolved, hardening measures implemented, and comp
   - Wrapped each client send with an `asyncio.wait_for(..., timeout=4.0)` safeguard; failing or timed-out sockets are cleanly unregistered.
 
 ### 3.3. Outbound Alert Dispatch & Cooldown Persistence
-- **Previous State:** Notifications were dispatched sequentially across channels (Telegram, WhatsApp, n8n, generic, Home Assistant, MQTT), causing cumulative HTTP latency. Alert cooldowns were held purely in memory (`_last_sent`), causing alert storm thundering herds upon application restarts. Alert queries in `recent_alerts()` filtered records in Python after loading arbitrary rows from SQLite.
+- **Previous State:** Notifications were dispatched sequentially across channels (Telegram, WhatsApp, n8n, generic, MQTT), causing cumulative HTTP latency. Alert cooldowns were held purely in memory (`_last_sent`), causing alert storm thundering herds upon application restarts. Alert queries in `recent_alerts()` filtered records in Python after loading arbitrary rows from SQLite.
 - **Optimized State:**
   - Channels are dispatched in parallel via `asyncio.gather()`.
   - Added fallback database verification on `fingerprint` to maintain cooldown suppression across application restarts.

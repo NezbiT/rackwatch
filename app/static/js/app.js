@@ -233,67 +233,6 @@
     setHtml(root, html);
   }
 
-  function renderHa(entities, haOk) {
-    const mini = $("ha-mini");
-    const grid = $("ha-grid");
-    const count = $("ha-count");
-    if (count) {
-      count.textContent = entities && entities.length ? t("count.entities", { n: entities.length }) : "";
-    }
-
-    function empty(msg, cta) {
-      return `<div class="rw-empty rw-empty-tight"><p>${esc(msg)}</p>${cta || ""}</div>`;
-    }
-    const settingsLink = `<a href="/settings">${esc(t("empty.open_settings"))}</a>`;
-
-    if (mini) {
-      if (!haOk) setHtml(mini, empty(t("empty.ha_off"), settingsLink));
-      else if (!entities.length) setHtml(mini, empty(t("empty.ha_none")));
-      else {
-        setHtml(
-          mini,
-          '<ul class="rw-plain rw-ha-mini">' +
-            entities
-              .slice(0, 8)
-              .map(
-                (e) => `<li>
-              <span class="rw-dot is-${esc(e.status)}" aria-hidden="true"></span>
-              <span class="rw-ellipsis">${esc(e.name)}</span>
-              <strong class="mono">${esc(e.state)}${e.unit ? " " + esc(e.unit) : ""}</strong>
-            </li>`
-              )
-              .join("") +
-            "</ul>"
-        );
-      }
-    }
-
-    if (grid) {
-      if (!haOk) {
-        setHtml(grid, empty(t("empty.ha_off_full"), settingsLink));
-        return;
-      }
-      if (!entities.length) {
-        setHtml(grid, empty(t("empty.ha_none_full")));
-        return;
-      }
-      setHtml(
-        grid,
-        '<div class="rw-ha-grid">' +
-          entities
-            .map(
-              (e) => `<article class="rw-ha-card is-${esc(e.status)}">
-            <div class="eid">${esc(e.entity_id)}</div>
-            <strong>${esc(e.name)}</strong>
-            <div class="state mono">${esc(e.state)}${e.unit ? " " + esc(e.unit) : ""}</div>
-          </article>`
-            )
-            .join("") +
-          "</div>"
-      );
-    }
-  }
-
   function renderAlerts(alerts) {
     const root = $("alert-mini");
     if (!root) return;
@@ -346,7 +285,6 @@ ${esc(net.map(n => `${n.interface_name || n.key || "?"}: ↓ ${n.bytes_recv_rate
     const bits = [];
     if (!snap.prometheus_ok) bits.push(t("banner.prom"));
     if (!snap.docker_ok) bits.push(t("banner.docker"));
-    if (document.body.dataset.nav === "ha" && !snap.ha_ok) bits.push(t("banner.ha"));
     if (!bits.length) {
       el.classList.add("is-hidden");
       el.textContent = "";
@@ -361,7 +299,6 @@ ${esc(net.map(n => `${n.interface_name || n.key || "?"}: ↓ ${n.bytes_recv_rate
     renderMetrics(snap.hosts || []);
     renderContainers(snap.containers || []);
     renderZfs(snap.zfs || []);
-    renderHa(snap.ha_entities || [], !!snap.ha_ok);
     renderAlerts(snap.alerts || []);
     renderGlances(snap.glances || {});
     banner(snap);

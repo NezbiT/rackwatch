@@ -118,21 +118,12 @@ class Settings(BaseSettings):
     alert_cooldown_seconds: int = Field(default=900, validation_alias="ALERT_COOLDOWN_SECONDS")
     alert_min_severity: Severity = Field(default="warning", validation_alias="ALERT_MIN_SEVERITY")
 
-    # Home Assistant
-    ha_url: str = Field(default="", validation_alias="HA_URL")
-    ha_token: str = Field(default="", validation_alias="HA_TOKEN")
-    ha_pinned_entities: str = Field(default="", validation_alias="HA_PINNED_ENTITIES")
-    ha_notify_service: str = Field(default="notify.notify", validation_alias="HA_NOTIFY_SERVICE")
-
+    # MQTT
     mqtt_host: str = Field(default="", validation_alias="MQTT_HOST")
     mqtt_port: int = Field(default=1883, validation_alias="MQTT_PORT")
     mqtt_username: str = Field(default="", validation_alias="MQTT_USERNAME")
     mqtt_password: str = Field(default="", validation_alias="MQTT_PASSWORD")
     mqtt_base_topic: str = Field(default="rackwatch", validation_alias="MQTT_BASE_TOPIC")
-    mqtt_ha_discovery: bool = Field(default=True, validation_alias="MQTT_HA_DISCOVERY")
-    mqtt_ha_discovery_prefix: str = Field(
-        default="homeassistant", validation_alias="MQTT_HA_DISCOVERY_PREFIX"
-    )
     mqtt_tls: bool = Field(default=False, validation_alias="MQTT_TLS")
 
     # SQLite data retention policy (in days)
@@ -170,10 +161,6 @@ class Settings(BaseSettings):
     @property
     def exec_allowlist(self) -> list[str]:
         return [n.lower() for n in _csv(self.container_exec_allowlist)]
-
-    @property
-    def pinned_entities(self) -> list[str]:
-        return _csv(self.ha_pinned_entities)
 
     @property
     def is_dev(self) -> bool:
