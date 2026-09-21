@@ -25,6 +25,13 @@ from app.schemas import Snapshot
 log = logging.getLogger("rackwatch.mqtt")
 
 
+def _clean_topic(topic: str) -> str:
+    cleaned = topic.strip().strip("/")
+    for bad in ("#", "+", "\0"):
+        cleaned = cleaned.replace(bad, "")
+    return cleaned or "rackwatch"
+
+
 class MqttBridge:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -33,7 +40,19 @@ class MqttBridge:
         self._lock = threading.Lock()
 
     def bind(self, settings: Settings) -> None:
+        changed = (
+            self.settings.mqtt_host != settings.mqtt_host
+            or self.settings.mqtt_port != settings.mqtt_port
+            or self.settings.mqtt_username != settings.mqtt_username
+            or self.settings.mqtt_password != settings.mqtt_password
+            or self.settings.mqtt_base_topic != settings.mqtt_base_topic
+            or getattr(self.settings, "mqtt_tls", False) != getattr(settings, "mqtt_tls", False)
+        )
         self.settings = settings
+        if changed:
+            self.stop()
+            if self.enabled:
+                self.start()
 
     @property
     def enabled(self) -> bool:
@@ -51,10 +70,19 @@ class MqttBridge:
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"rackwatch-{self.settings.instance_name}")
         if self.settings.mqtt_username:
             client.username_pw_set(self.settings.mqtt_username, self.settings.mqtt_password)
+
+        if getattr(self.settings, "mqtt_tls", False) or self.settings.mqtt_port == 8883:
+            try:
+                import ssl
+                client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
+            except Exception as exc:
+                log.warning("MQTT TLS setup failed: %s", exc)
+
         client.on_connect = self._on_connect
         client.on_disconnect = self._on_disconnect
+        base_topic = _clean_topic(self.settings.mqtt_base_topic)
         client.will_set(
-            f"{self.settings.mqtt_base_topic}/status",
+            f"{base_topic}/status",
             payload="offline",
             retain=True,
         )
@@ -70,7 +98,8 @@ class MqttBridge:
         if self._client is None:
             return
         try:
-            self._publish(f"{self.settings.mqtt_base_topic}/status", "offline", retain=True)
+            base_topic = _clean_topic(self.settings.mqtt_base_topic)
+            self._publish(f"{base_topic}/status", "offline", retain=True)
             self._client.loop_stop()
             self._client.disconnect()
         except Exception:
@@ -83,7 +112,8 @@ class MqttBridge:
         self.ok = rc == 0
         log.info("MQTT connected rc=%s", rc)
         if self.ok:
-            self._publish(f"{self.settings.mqtt_base_topic}/status", "online", retain=True)
+            base_topic = _clean_topic(self.settings.mqtt_base_topic)
+            self._publish(f"{base_topic}/status", "online", retain=True)
             if self.settings.mqtt_ha_discovery:
                 self._announce_discovery()
 
@@ -92,8 +122,8 @@ class MqttBridge:
         log.warning("MQTT disconnected (%s)", reason)
 
     def _announce_discovery(self) -> None:
-        prefix = self.settings.mqtt_ha_discovery_prefix
-        base = self.settings.mqtt_base_topic
+        prefix = _clean_topic(self.settings.mqtt_ha_discovery_prefix)
+        base = _clean_topic(self.settings.mqtt_base_topic)
         node = self.settings.instance_name
         sensors = (
             ("cpu", "CPU", "%", "mdi:cpu-64-bit", "{{ value_json.cpu }}"),
@@ -128,6 +158,7 @@ class MqttBridge:
     def publish_snapshot(self, snapshot: Snapshot) -> None:
         if not self.ok:
             return
+        base = _clean_topic(self.settings.mqtt_base_topic)
         body = {
             "cpu": snapshot.summary.get("cpu"),
             "ram": snapshot.summary.get("ram"),
@@ -137,12 +168,13 @@ class MqttBridge:
             "instance": snapshot.instance,
             "ts": snapshot.ts,
         }
-        self._publish(f"{self.settings.mqtt_base_topic}/snapshot", json.dumps(body), retain=True)
+        self._publish(f"{base}/snapshot", json.dumps(body), retain=True)
 
     def publish_alert(self, payload: dict[str, Any]) -> bool:
         if not self.ok:
             return False
-        self._publish(f"{self.settings.mqtt_base_topic}/alerts", json.dumps(payload), retain=False)
+        base = _clean_topic(self.settings.mqtt_base_topic)
+        self._publish(f"{base}/alerts", json.dumps(payload), retain=False)
         return True
 
     def _publish(self, topic: str, payload: str, retain: bool = False) -> None:

@@ -45,6 +45,12 @@ class Hub:
 
     def apply_filters(self, snapshot: Snapshot, filters: Filters) -> dict[str, Any]:
         """Return a JSON-ready snapshot reduced by the client's filters."""
+        # Fast-path for clients without active filter criteria
+        if not filters.host and not filters.service and not filters.status and not filters.severity:
+            base = snapshot.model_dump(mode="json")
+            base["filters"] = filters.model_dump()
+            return base
+
         hosts = snapshot.hosts
         containers = snapshot.containers
         alerts = snapshot.alerts
@@ -99,11 +105,29 @@ class Hub:
         self.latest = snapshot
         async with self._lock:
             targets = list(self.clients)
-        stale: list[Client] = []
-        for client in targets:
+        if not targets:
+            return
+
+        # Pre-calculate unfiltered dump once for efficiency
+        cached_unfiltered: dict[str, Any] | None = None
+
+        async def _send(client: Client) -> Client | None:
+            nonlocal cached_unfiltered
             try:
-                await client.ws.send_json(self.apply_filters(snapshot, client.filters))
+                if not client.filters.host and not client.filters.service and not client.filters.status and not client.filters.severity:
+                    if cached_unfiltered is None:
+                        cached_unfiltered = snapshot.model_dump(mode="json")
+                    payload = dict(cached_unfiltered)
+                    payload["filters"] = client.filters.model_dump()
+                else:
+                    payload = self.apply_filters(snapshot, client.filters)
+
+                await asyncio.wait_for(client.ws.send_json(payload), timeout=4.0)
+                return None
             except Exception:
-                stale.append(client)
+                return client
+
+        results = await asyncio.gather(*[_send(c) for c in targets], return_exceptions=True)
+        stale = [res for res in results if isinstance(res, Client)]
         for client in stale:
             await self.unregister(client)

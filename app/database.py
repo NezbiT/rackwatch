@@ -11,8 +11,10 @@ can arrive empty.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from sqlalchemy import delete, event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -53,6 +55,19 @@ engine = create_async_engine(
     else {},
 )
 
+
+@event.listens_for(engine.sync_engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    """Enable WAL mode, reasonable busy timeout, and foreign key constraints for SQLite."""
+    if "sqlite" in settings.database_url:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+
 async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
@@ -68,3 +83,20 @@ async def get_session() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency."""
     async with async_session() as session:
         yield session
+
+
+async def cleanup_old_records(retention_days: int = 30) -> dict[str, int]:
+    """Purge records older than retention_days to enforce data retention limits."""
+    from app.models import Alert, RestartEvent, WebhookDelivery
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, retention_days))
+    counts: dict[str, int] = {}
+    async with async_session() as session:
+        res_a = await session.execute(delete(Alert).where(Alert.created_at < cutoff))
+        counts["alerts"] = res_a.rowcount or 0
+        res_r = await session.execute(delete(RestartEvent).where(RestartEvent.created_at < cutoff))
+        counts["restarts"] = res_r.rowcount or 0
+        res_w = await session.execute(delete(WebhookDelivery).where(WebhookDelivery.created_at < cutoff))
+        counts["webhook_deliveries"] = res_w.rowcount or 0
+        await session.commit()
+    return counts

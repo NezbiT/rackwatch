@@ -16,6 +16,7 @@ import asyncio
 import io
 import logging
 import os
+import posixpath
 import shlex
 import sys
 import tarfile
@@ -27,6 +28,14 @@ from app.schemas import ContainerMetrics
 from app.services.status import container_severity
 
 log = logging.getLogger("rackwatch.docker")
+
+MAX_FILE_READ_BYTES = 1024 * 1024  # 1 MB
+MAX_FILE_WRITE_BYTES = 1024 * 1024  # 1 MB
+MAX_EXEC_OUTPUT_CHARS = 65536  # 64 KB
+EXEC_TIMEOUT_SECONDS = 15.0
+
+SENSITIVE_PATH_PREFIXES = ("/proc", "/sys", "/dev")
+SENSITIVE_FILES = ("/etc/shadow", "/etc/gshadow", "/etc/sudoers")
 
 
 class DockerControl:
@@ -129,24 +138,41 @@ class DockerControl:
     async def stop(self, name_or_id: str, *, force: bool = False) -> tuple[bool, str]:
         return await asyncio.to_thread(self._action_sync, name_or_id, force, "stop")
 
-    async def exec(self, name_or_id: str, command: str) -> tuple[bool, dict[str, Any] | str]:
-        return await asyncio.to_thread(self._exec_sync, name_or_id, command)
+    async def exec(self, name_or_id: str, command: str, *, force: bool = False) -> tuple[bool, dict[str, Any] | str]:
+        if not force and self.is_denied(name_or_id):
+            return False, f"{name_or_id} is on the denylist (override requires force=True)"
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._exec_sync, name_or_id, command),
+                timeout=EXEC_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            return False, f"command execution timed out after {int(EXEC_TIMEOUT_SECONDS)}s"
 
-    async def get_file(self, name_or_id: str, path: str) -> tuple[bool, str]:
+    async def get_file(self, name_or_id: str, path: str, *, force: bool = False) -> tuple[bool, str]:
+        if not force and self.is_denied(name_or_id):
+            return False, f"{name_or_id} is on the denylist (override requires force=True)"
         return await asyncio.to_thread(self._get_file_sync, name_or_id, path)
 
-    async def put_file(self, name_or_id: str, path: str, content: str) -> tuple[bool, str]:
+    async def put_file(self, name_or_id: str, path: str, content: str, *, force: bool = False) -> tuple[bool, str]:
+        if "rackwatch" in name_or_id.lower():
+            return False, "file modification of rackwatch container is prohibited"
+        if not force and self.is_denied(name_or_id):
+            return False, f"{name_or_id} is on the denylist (override requires force=True)"
         return await asyncio.to_thread(self._put_file_sync, name_or_id, path, content)
 
     async def inspect(self, name_or_id: str) -> tuple[bool, dict[str, Any] | str]:
         return await asyncio.to_thread(self._inspect_sync, name_or_id)
 
     def _exec_sync(self, name_or_id: str, command: str) -> tuple[bool, dict[str, Any] | str]:
+        cmd_clean = command.strip()
+        if not cmd_clean or len(cmd_clean) > 500:
+            return False, "command must be between 1 and 500 characters"
         try:
-            argv = shlex.split(command, posix=True)
+            argv = shlex.split(cmd_clean, posix=True)
         except ValueError as exc:
             return False, f"invalid command syntax: {exc}"
-        if not argv or any(token in command for token in (";", "&&", "||", "|", ">", "<", "`", "$", "\\")):
+        if not argv or any(token in cmd_clean for token in (";", "&&", "||", "|", ">", "<", "`", "$", "\\")):
             return False, "shell operators are not allowed"
         executable = os.path.basename(argv[0]).lower()
         if executable in {"sh", "bash", "ash", "zsh", "dash", "cmd", "powershell", "pwsh"}:
@@ -165,39 +191,79 @@ class DockerControl:
             if isinstance(output, tuple):
                 output = b"".join(part or b"" for part in output)
             text = output.decode("utf-8", "replace") if isinstance(output, bytes) else str(output or "")
-            return True, {"exit_code": result.exit_code, "output": text[-500000:]}
+            return True, {"exit_code": result.exit_code, "output": text[-MAX_EXEC_OUTPUT_CHARS:]}
         except Exception as exc:
             return False, str(exc)
 
+    def _validate_path(self, raw_path: str) -> tuple[bool, str]:
+        path = raw_path.strip()
+        if not path:
+            return False, "path cannot be empty"
+        clean = posixpath.normpath(path)
+        if not clean.startswith("/"):
+            return False, "path must be absolute (start with /)"
+        parts = clean.split("/")
+        if ".." in parts:
+            return False, "path traversal is not allowed"
+        for prefix in SENSITIVE_PATH_PREFIXES:
+            if clean == prefix or clean.startswith(prefix + "/"):
+                return False, f"access to '{prefix}' is restricted"
+        if clean in SENSITIVE_FILES:
+            return False, f"access to '{clean}' is restricted"
+        return True, clean
+
     def _get_file_sync(self, name_or_id: str, path: str) -> tuple[bool, str]:
+        ok, clean_path = self._validate_path(path)
+        if not ok:
+            return False, clean_path
+
         client = self._connect()
         if client is None:
             return False, "Docker engine is not reachable"
         try:
             container = client.containers.get(name_or_id)
-            bits, _ = container.get_archive(path)
-            tar_bytes = b"".join(bits)
+            bits, _ = container.get_archive(clean_path)
+            tar_bytes = bytearray()
+            for chunk in bits:
+                tar_bytes.extend(chunk)
+                if len(tar_bytes) > MAX_FILE_READ_BYTES + 8192:
+                    return False, f"file archive exceeds read limit of {MAX_FILE_READ_BYTES} bytes"
+
             with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
                 member = tar.next()
                 if member is None:
                     return False, "empty archive"
+                if not member.isreg():
+                    return False, f"target '{clean_path}' is not a regular file"
+                if member.size > MAX_FILE_READ_BYTES:
+                    return False, f"file size ({member.size} bytes) exceeds limit of {MAX_FILE_READ_BYTES} bytes"
                 f = tar.extractfile(member)
                 if f is None:
                     return False, "could not extract file"
-                content = f.read().decode("utf-8", "replace")
+                content = f.read(MAX_FILE_READ_BYTES + 1).decode("utf-8", "replace")
                 return True, content
         except Exception as exc:
             return False, str(exc)
 
     def _put_file_sync(self, name_or_id: str, path: str, content: str) -> tuple[bool, str]:
+        ok, clean_path = self._validate_path(path)
+        if not ok:
+            return False, clean_path
+
         client = self._connect()
         if client is None:
             return False, "Docker engine is not reachable"
         try:
             container = client.containers.get(name_or_id)
-            dirname = os.path.dirname(path) or "/"
-            basename = os.path.basename(path)
+            dirname = posixpath.dirname(clean_path) or "/"
+            basename = posixpath.basename(clean_path)
+            if not basename or "/" in basename or "\\" in basename or basename in {".", ".."}:
+                return False, "invalid destination filename"
+
             data = content.encode("utf-8")
+            if len(data) > MAX_FILE_WRITE_BYTES:
+                return False, f"content size ({len(data)} bytes) exceeds limit of {MAX_FILE_WRITE_BYTES} bytes"
+
             tar_buf = io.BytesIO()
             with tarfile.open(fileobj=tar_buf, mode="w") as tar:
                 ti = tarfile.TarInfo(name=basename)

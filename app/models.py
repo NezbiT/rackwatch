@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -25,10 +25,10 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
     fingerprint: Mapped[str] = mapped_column(String(128), index=True)
     severity: Mapped[str] = mapped_column(String(16), index=True)
-    status: Mapped[str] = mapped_column(String(16), default="firing")  # firing | resolved
+    status: Mapped[str] = mapped_column(String(16), default="firing", index=True)  # firing | resolved
     source: Mapped[str] = mapped_column(String(64))  # cpu | ram | disk | container | zfs | ha
     host: Mapped[str] = mapped_column(String(128), default="")
     service: Mapped[str] = mapped_column(String(128), default="")
@@ -37,6 +37,11 @@ class Alert(Base):
     delivered_to: Mapped[str] = mapped_column(String(256), default="")
     acked: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    __table_args__ = (
+        Index("ix_alerts_status_created", "status", "created_at"),
+        Index("ix_alerts_fingerprint_created", "fingerprint", "created_at"),
+    )
+
 
 class RestartEvent(Base):
     """Audit log of every auto or manual container restart."""
@@ -44,7 +49,7 @@ class RestartEvent(Base):
     __tablename__ = "restarts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
     container: Mapped[str] = mapped_column(String(128), index=True)
     container_id: Mapped[str] = mapped_column(String(64), default="")
     reason: Mapped[str] = mapped_column(String(256), default="")
@@ -69,7 +74,7 @@ class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
     channel: Mapped[str] = mapped_column(String(32), index=True)
     ok: Mapped[bool] = mapped_column(Boolean, default=False)
     status_code: Mapped[int] = mapped_column(Integer, default=0)

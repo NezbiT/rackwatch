@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 Status = Literal["ok", "warning", "error", "unknown"]
@@ -99,11 +100,11 @@ class RestartOut(BaseModel):
 class Filters(BaseModel):
     """Live dashboard filters. Empty string means 'any'."""
 
-    host: str = ""
-    service: str = ""
-    severity: str = ""  # info | warning | critical | ""
-    status: str = ""  # ok | warning | error | ""
-    time_range: str = "1h"  # 15m | 1h | 6h | 24h | 7d
+    host: str = Field(default="", max_length=128)
+    service: str = Field(default="", max_length=128)
+    severity: str = Field(default="", max_length=32)  # info | warning | critical | ""
+    status: str = Field(default="", max_length=32)  # ok | warning | error | ""
+    time_range: str = Field(default="1h", max_length=16)  # 15m | 1h | 6h | 24h | 7d
 
 
 class Snapshot(BaseModel):
@@ -127,11 +128,11 @@ class Snapshot(BaseModel):
 
 class WsClientMessage(BaseModel):
     type: Literal["filter", "ping"] = "filter"
-    host: str = ""
-    service: str = ""
-    severity: str = ""
-    status: str = ""
-    time_range: str = "1h"
+    host: str = Field(default="", max_length=128)
+    service: str = Field(default="", max_length=128)
+    severity: str = Field(default="", max_length=32)
+    status: str = Field(default="", max_length=32)
+    time_range: str = Field(default="1h", max_length=16)
 
 
 class RestartRequest(BaseModel):
@@ -152,7 +153,72 @@ class ContainerFileReadRequest(BaseModel):
 
 class ContainerFileWriteRequest(BaseModel):
     path: str = Field(min_length=1, max_length=1000)
-    content: str
+    content: str = Field(max_length=1_048_576)  # 1 MB max payload
+
+
+class SettingsUpdate(BaseModel):
+    instance_name: str | None = Field(default=None, max_length=64)
+    refresh_seconds: int | None = Field(default=None, ge=1, le=300)
+    threshold_cpu_warn: float | None = Field(default=None, ge=0.0, le=100.0)
+    threshold_cpu_crit: float | None = Field(default=None, ge=0.0, le=100.0)
+    threshold_ram_warn: float | None = Field(default=None, ge=0.0, le=100.0)
+    threshold_ram_crit: float | None = Field(default=None, ge=0.0, le=100.0)
+    threshold_disk_warn: float | None = Field(default=None, ge=0.0, le=100.0)
+    threshold_disk_crit: float | None = Field(default=None, ge=0.0, le=100.0)
+    auto_restart_enabled: bool | None = None
+    auto_restart_delay_seconds: int | None = Field(default=None, ge=0, le=3600)
+    auto_restart_cooldown_seconds: int | None = Field(default=None, ge=0, le=86400)
+    auto_restart_max_per_hour: int | None = Field(default=None, ge=1, le=100)
+    auto_restart_denylist: str | None = Field(default=None, max_length=1000)
+    auto_restart_allowlist: str | None = Field(default=None, max_length=1000)
+    telegram_bot_token: str | None = Field(default=None, max_length=256)
+    telegram_chat_id: str | None = Field(default=None, max_length=128)
+    whatsapp_phone: str | None = Field(default=None, max_length=64)
+    whatsapp_apikey: str | None = Field(default=None, max_length=256)
+    whatsapp_webhook_url: str | None = Field(default=None, max_length=512)
+    n8n_webhook_url: str | None = Field(default=None, max_length=512)
+    n8n_chat_webhook_url: str | None = Field(default=None, max_length=512)
+    n8n_chat_auth_header: str | None = Field(default=None, max_length=512)
+    generic_webhook_url: str | None = Field(default=None, max_length=512)
+    alert_cooldown_seconds: int | None = Field(default=None, ge=0, le=86400)
+    alert_min_severity: Literal["info", "warning", "critical"] | None = None
+    ha_url: str | None = Field(default=None, max_length=512)
+    ha_token: str | None = Field(default=None, max_length=512)
+    ha_pinned_entities: str | None = Field(default=None, max_length=1000)
+    ha_notify_service: str | None = Field(default=None, max_length=256)
+    mqtt_host: str | None = Field(default=None, max_length=256)
+    mqtt_port: int | None = Field(default=None, ge=1, le=65535)
+    mqtt_username: str | None = Field(default=None, max_length=128)
+    mqtt_password: str | None = Field(default=None, max_length=256)
+    mqtt_base_topic: str | None = Field(default=None, max_length=256)
+    mqtt_tls: bool | None = None
+    db_retention_days: int | None = Field(default=None, ge=1, le=3650)
+    grafana_public_url: str | None = Field(default=None, max_length=512)
+    grafana_dashboard_uid: str | None = Field(default=None, max_length=128)
+
+    @field_validator(
+        "whatsapp_webhook_url",
+        "n8n_webhook_url",
+        "n8n_chat_webhook_url",
+        "generic_webhook_url",
+        "ha_url",
+        "grafana_public_url",
+        mode="before",
+    )
+    @classmethod
+    def validate_url(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        text = str(v).strip()
+        if not text:
+            return ""
+        parsed = urlsplit(text)
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError(f"URL scheme must be http or https, got {parsed.scheme!r}")
+        if not parsed.netloc:
+            raise ValueError("URL must have a valid host")
+        return text
+
 
 
 class ContainerExecOut(BaseModel):

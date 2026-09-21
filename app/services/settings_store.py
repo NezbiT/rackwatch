@@ -53,19 +53,50 @@ WRITABLE: dict[str, type] = {
     "mqtt_username": str,
     "mqtt_password": str,
     "mqtt_base_topic": str,
+    "mqtt_tls": bool,
+    "db_retention_days": int,
     "grafana_public_url": str,
     "grafana_dashboard_uid": str,
 }
 
 
-def _coerce(kind: type, raw: str) -> Any:
+def _coerce(kind: type, raw: Any) -> Any:
+    if raw is None:
+        return None
+    if isinstance(raw, (bool, int, float)) and kind is type(raw):
+        return raw
+    raw_str = str(raw).strip()
     if kind is bool:
-        return str(raw).lower() in {"1", "true", "yes", "on"}
+        return raw_str.lower() in {"1", "true", "yes", "on"}
     if kind is int:
-        return int(raw)
+        return int(raw_str)
     if kind is float:
-        return float(raw)
-    return raw
+        return float(raw_str)
+    return raw_str
+
+
+def validate_settings_dict(values: dict[str, Any]) -> dict[str, Any]:
+    """Validate and sanitize settings overrides before persisting."""
+    from app.schemas import SettingsUpdate
+
+    raw_dict: dict[str, Any] = {}
+    for key, val in values.items():
+        if key not in WRITABLE:
+            continue
+        if val is None:
+            continue
+        kind = WRITABLE[key]
+        try:
+            raw_dict[key] = _coerce(kind, val)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid format for setting '{key}': {exc}") from exc
+
+    validated = SettingsUpdate(**raw_dict)
+    out: dict[str, Any] = {}
+    for key, val in validated.model_dump(exclude_unset=True).items():
+        if key in WRITABLE and val is not None:
+            out[key] = val
+    return out
 
 
 async def load_overrides() -> dict[str, Any]:
@@ -84,12 +115,9 @@ async def load_overrides() -> dict[str, Any]:
 
 
 async def save_overrides(values: dict[str, Any]) -> None:
+    cleaned = validate_settings_dict(values)
     async with async_session() as session:
-        for key, value in values.items():
-            if key not in WRITABLE:
-                continue
-            if value is None:
-                continue
+        for key, value in cleaned.items():
             existing = await session.get(SettingOverride, key)
             as_text = "true" if value is True else "false" if value is False else str(value)
             if existing:
@@ -98,6 +126,7 @@ async def save_overrides(values: dict[str, Any]) -> None:
             else:
                 session.add(SettingOverride(key=key, value=as_text))
         await session.commit()
+
 
 
 async def merged() -> Settings:

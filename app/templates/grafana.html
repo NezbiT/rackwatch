@@ -37,7 +37,8 @@
       title="{{ t('graphs.iframe') }}"
       src="{{ src }}"
       loading="lazy"
-      referrerpolicy="no-referrer-when-downgrade"></iframe>
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+      referrerpolicy="no-referrer"></iframe>
     <p class="rw-muted rw-embed-help">
       {{ t('graphs.embed') }}: <code>{{ src }}</code>
     </p>

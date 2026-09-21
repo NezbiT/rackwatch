@@ -17,11 +17,12 @@
   {% endif %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet" href="/static/css/app.css">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
-  <script>window.RW = { lang: {{ lang|tojson }}, theme: {{ theme|tojson }}, i18n: {{ i18n_json|safe }}, n8nChat: {{ n8n_chat|tojson }}, n8nChatMode: {{ (nav == 'chat')|tojson }} };</script>
+  <script>window.RW = { lang: {{ lang|tojson }}, theme: {{ theme|tojson }}, i18n: {{ i18n_json|safe }}, n8nChat: {{ n8n_chat|tojson }}, n8nChatMode: {{ (nav == 'chat')|tojson }}, csrfToken: {{ csrf_token|tojson }} };</script>
   {% block head %}{% endblock %}
 </head>
-<body class="rw-body" data-nav="{{ nav }}">
+<body class="rw-body" data-nav="{{ nav }}" hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
   <div class="rw-parallax" aria-hidden="true">
     <div class="rw-parallax-nebula"></div>
     <div class="rw-parallax-stars"></div>
@@ -62,6 +63,7 @@
       </div>
       {% if auth_enabled %}
       <form method="post" action="/logout" class="rw-logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="secondary outline">{{ t('nav.sign_out') }}</button>
       </form>
       {% endif %}

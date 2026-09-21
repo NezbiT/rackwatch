@@ -21,10 +21,11 @@ Dedup: the same fingerprint is silent for ALERT_COOLDOWN_SECONDS.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -68,8 +69,29 @@ class Alerter:
             self.settings.alert_min_severity, 2
         )
 
-    def _cooled(self, fingerprint: str) -> bool:
-        last = self._last_sent.get(fingerprint, 0)
+    async def _cooled(self, fingerprint: str) -> bool:
+        last = self._last_sent.get(fingerprint)
+        if last is None:
+            # Query recent DB record to preserve cooldown across app restarts
+            try:
+                async with async_session() as session:
+                    row = await session.execute(
+                        select(Alert.created_at)
+                        .where(Alert.fingerprint == fingerprint)
+                        .order_by(Alert.created_at.desc())
+                        .limit(1)
+                    )
+                    recent_dt = row.scalar_one_or_none()
+                    if recent_dt is not None:
+                        if recent_dt.tzinfo is None:
+                            recent_dt = recent_dt.replace(tzinfo=timezone.utc)
+                        last = recent_dt.timestamp()
+                        self._last_sent[fingerprint] = last
+            except Exception:
+                pass
+
+        if last is None:
+            return False
         return (time.time() - last) < self.settings.alert_cooldown_seconds
 
     async def evaluate(self, snapshot: Snapshot) -> list[Alert]:
@@ -156,7 +178,7 @@ class Alerter:
             if not self._allowed(item["severity"]):
                 continue
             fp = self.fingerprint(item["source"], item["host"], item["service"], item["title"])
-            if self._cooled(fp):
+            if await self._cooled(fp):
                 continue
             alert = await self.fire(
                 title=item["title"],
@@ -256,12 +278,16 @@ class Alerter:
             "url": f"{self.settings.public_url.rstrip('/')}/alerts",
             "ts": int(time.time()),
         }
-        delivered: list[str] = []
         wanted = channels or ["telegram", "whatsapp", "n8n", "generic", "homeassistant", "mqtt"]
-        for channel in wanted:
+
+        async def _dispatch_task(channel: str) -> tuple[str, bool]:
             ok = await self._dispatch(channel, payload, title, message, severity)
-            if ok:
-                delivered.append(channel)
+            return channel, ok
+
+        results = await asyncio.gather(*[_dispatch_task(ch) for ch in wanted], return_exceptions=True)
+        delivered: list[str] = [
+            res[0] for res in results if isinstance(res, tuple) and res[1]
+        ]
 
         self._last_sent[fp] = time.time()
         alert = Alert(
@@ -371,18 +397,16 @@ async def _log_delivery(channel: str, ok: bool, status_code: int, payload: str, 
 
 async def recent_alerts(limit: int = 80, time_range: str = "24h") -> list[AlertOut]:
     seconds = {"15m": 900, "1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800}.get(time_range, 86400)
-    cutoff = datetime.now(timezone.utc).timestamp() - seconds
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=seconds)
     async with async_session() as session:
         rows = await session.execute(
-            select(Alert).order_by(Alert.created_at.desc()).limit(limit)
+            select(Alert)
+            .where(Alert.created_at >= cutoff)
+            .order_by(Alert.created_at.desc())
+            .limit(limit)
         )
         out: list[AlertOut] = []
         for row in rows.scalars():
-            ts = row.created_at
-            if ts and ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            if ts and ts.timestamp() < cutoff:
-                continue
             out.append(
                 AlertOut(
                     id=row.id,

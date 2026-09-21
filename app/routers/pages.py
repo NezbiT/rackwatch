@@ -8,6 +8,7 @@ filter chips, and settings saves.
 from __future__ import annotations
 
 import json
+import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -25,10 +26,17 @@ from app.i18n import (
     catalog,
     resolve_lang,
     resolve_theme,
-    safe_next,
     translate,
 )
-from app.security import is_signed_in, require_session, verify_login
+from app.security import (
+    get_or_create_csrf_token,
+    is_signed_in,
+    require_csrf,
+    require_session,
+    safe_next,
+    verify_csrf,
+    verify_login,
+)
 from app.services import settings_store
 from app.services.alerter import recent_alerts
 from app.services.restarter import recent_restarts
@@ -50,6 +58,7 @@ def _ctx(request: Request, settings: Settings, **extra: object) -> dict:
     if request.url.query:
         here = f"{here}?{request.url.query}"
     n8n_chat = bool((getattr(settings, "n8n_chat_webhook_url", "") or "").strip())
+    csrf_tok = get_or_create_csrf_token(request)
     return {
         "request": request,
         "settings": settings,
@@ -63,6 +72,7 @@ def _ctx(request: Request, settings: Settings, **extra: object) -> dict:
         "t": t,
         "here": here,
         "n8n_chat": n8n_chat,
+        "csrf_token": csrf_tok,
         "i18n_json": json.dumps(catalog(lang), ensure_ascii=False),
         **extra,
     }
@@ -87,12 +97,13 @@ async def login_page(
     settings: Annotated[Settings, Depends(get_settings)],
     next: str = "/",
 ):
+    target = safe_next(next, "/")
     if not settings.auth_enabled or is_signed_in(request, settings):
-        return RedirectResponse(next or "/", status_code=303)
+        return RedirectResponse(target, status_code=303)
     return templates.TemplateResponse(
         request,
         "login.html",
-        _ctx(request, settings, nav="login", error="", next=next),
+        _ctx(request, settings, nav="login", error="", next=target),
     )
 
 
@@ -103,10 +114,27 @@ async def login_submit(
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
     next: Annotated[str, Form()] = "/",
+    csrf_token: Annotated[str | None, Form()] = None,
 ):
+    target = safe_next(next, "/")
+    if settings.auth_enabled and not verify_csrf(request, csrf_token):
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            _ctx(
+                request,
+                settings,
+                nav="login",
+                error="Invalid or expired CSRF token. Please refresh and try again.",
+                next=target,
+            ),
+            status_code=403,
+        )
     if verify_login(username.strip(), password, settings):
         request.session["uid"] = username.strip()
-        return RedirectResponse(next or "/", status_code=303)
+        # Regenerate CSRF token on login
+        request.session["csrf_token"] = secrets.token_urlsafe(32)
+        return RedirectResponse(target, status_code=303)
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -115,7 +143,7 @@ async def login_submit(
             settings,
             nav="login",
             error=translate(resolve_lang(request), "login.error"),
-            next=next,
+            next=target,
         ),
         status_code=401,
     )
@@ -155,7 +183,10 @@ async def set_prefs_post(request: Request):
 
 
 @router.post("/logout")
-async def logout(request: Request):
+async def logout(
+    request: Request,
+    _: Annotated[None, Depends(require_csrf)],
+):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 
@@ -186,12 +217,14 @@ async def services_page(
         _ctx(request, live, nav="services", restarts=restarts),
     )
 
+
 @router.get("/services/{name}/logs")
 async def service_logs(name: str, request: Request, _: Annotated[None, Depends(require_session)], lines: int = 120):
     ok, detail = await request.app.state.docker.logs(name, lines=max(1, min(lines, 500)))
     if not ok:
         raise HTTPException(status_code=404, detail=detail)
     return {"ok": True, "container": name, "logs": detail}
+
 
 @router.get("/services/{name}/inspect")
 async def service_inspect(name: str, request: Request, _: Annotated[None, Depends(require_session)]):
@@ -200,8 +233,14 @@ async def service_inspect(name: str, request: Request, _: Annotated[None, Depend
         raise HTTPException(status_code=404, detail=detail)
     return {"ok": True, "container": name, "inspect": detail}
 
+
 @router.post("/services/{name}/exec")
-async def service_exec(name: str, request: Request, _: Annotated[None, Depends(require_session)]):
+async def service_exec(
+    name: str,
+    request: Request,
+    _: Annotated[None, Depends(require_session)],
+    __: Annotated[None, Depends(require_csrf)],
+):
     body = await request.json()
     command = str(body.get("command") or "")
     ok, detail = await request.app.state.docker.exec(name, command)
@@ -233,6 +272,8 @@ async def graphs_page(
     panel: str = "overview",
     range: str = "1h",
 ):
+    clean_panel = panel if panel in {"overview", "docker"} else "overview"
+    clean_range = range if range in {"15m", "1h", "6h", "24h", "7d"} else "1h"
     live = await settings_store.merged()
     return templates.TemplateResponse(
         request,
@@ -241,8 +282,8 @@ async def graphs_page(
             request,
             live,
             nav="graphs",
-            panel=panel,
-            time_range=range,
+            panel=clean_panel,
+            time_range=clean_range,
         ),
     )
 
@@ -268,7 +309,6 @@ async def ha_page(
 ):
     live = await settings_store.merged()
     return templates.TemplateResponse(
-        request,
         "homeassistant.html",
         _ctx(request, live, nav="ha"),
     )
@@ -280,12 +320,13 @@ async def settings_page(
     settings: Annotated[Settings, Depends(get_settings)],
     _: Annotated[None, Depends(require_session)],
     saved: int = 0,
+    error: str = "",
 ):
     live = await settings_store.merged()
     return templates.TemplateResponse(
         request,
         "settings.html",
-        _ctx(request, live, nav="settings", saved=bool(saved)),
+        _ctx(request, live, nav="settings", saved=bool(saved), error=error),
     )
 
 
@@ -295,6 +336,7 @@ async def restart_from_ui(
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
     _: Annotated[None, Depends(require_session)],
+    __: Annotated[None, Depends(require_csrf)],
     force: int = 0,
 ):
     """HTMX endpoint: restart a container and return a toast fragment."""
@@ -336,6 +378,7 @@ async def test_alert_from_ui(
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
     _: Annotated[None, Depends(require_session)],
+    __: Annotated[None, Depends(require_csrf)],
     channel: Annotated[str, Form()] = "all",
     message: Annotated[str, Form()] = "",
 ):
@@ -369,12 +412,14 @@ async def test_alert_from_ui(
 @router.post("/settings", response_class=HTMLResponse)
 async def settings_save(
     request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
     _: Annotated[None, Depends(require_session)],
+    __: Annotated[None, Depends(require_csrf)],
 ):
     form = await request.form()
     values: dict = {}
-    bools = {"auto_restart_enabled"}
-    for key, kind in settings_store.WRITABLE.items():
+    bools = {"auto_restart_enabled", "mqtt_tls"}
+    for key in settings_store.WRITABLE:
         if key in bools:
             values[key] = key in form
             continue
@@ -382,5 +427,13 @@ async def settings_save(
             continue
         raw = str(form.get(key) or "")
         values[key] = raw
-    await settings_store.save_overrides(values)
+    try:
+        await settings_store.save_overrides(values)
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            request,
+            "settings.html",
+            _ctx(request, await settings_store.merged(), nav="settings", saved=False, error=str(exc)),
+            status_code=400,
+        )
     return RedirectResponse("/settings?saved=1", status_code=303)

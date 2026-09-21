@@ -21,6 +21,7 @@ import logging
 import time
 from typing import Any
 
+from app.database import cleanup_old_records
 from app.schemas import Snapshot
 from app.services import settings_store
 from app.services.alerter import Alerter, recent_alerts
@@ -61,6 +62,7 @@ class Collector:
         self.glances = glances
         self.started_at = time.time()
         self._task: asyncio.Task[None] | None = None
+        self._last_cleanup = 0.0
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._run(), name="rackwatch-collector")
@@ -90,6 +92,19 @@ class Collector:
                 raise
             except Exception:
                 log.exception("collector tick failed")
+
+            # Periodic SQLite retention cleanup (once per hour)
+            now = time.time()
+            if now - self._last_cleanup > 3600:
+                self._last_cleanup = now
+                try:
+                    settings = await settings_store.merged()
+                    retention_days = getattr(settings, "db_retention_days", 30)
+                    cleaned = await cleanup_old_records(retention_days)
+                    log.info("SQLite retention cleanup completed: %s", cleaned)
+                except Exception as exc:
+                    log.debug("SQLite retention cleanup error: %s", exc)
+
             settings = await settings_store.merged()
             await asyncio.sleep(max(1, settings.refresh_seconds))
 
@@ -108,12 +123,31 @@ class Collector:
             self.ha.ready(),
         )
 
-        hosts = await self.prom.hosts() if prom_ok else []
-        usage = await self.prom.container_usage() if prom_ok else {}
+        async def _fetch_hosts():
+            return await self.prom.hosts() if prom_ok else []
+
+        async def _fetch_usage():
+            return await self.prom.container_usage() if prom_ok else {}
+
+        async def _fetch_zfs():
+            return await self.zfs.pools()
+
+        async def _fetch_ha():
+            return await self.ha.entities() if ha_ok else []
+
+        async def _fetch_glances():
+            return await self.glances.summary() if self.glances else {}
+
+        # Fetch telemetry metrics concurrently
+        hosts, usage, zfs, ha_entities, glances_data = await asyncio.gather(
+            _fetch_hosts(),
+            _fetch_usage(),
+            _fetch_zfs(),
+            _fetch_ha(),
+            _fetch_glances(),
+        )
+
         containers = await self.docker.list_containers(usage)
-        zfs = await self.zfs.pools()
-        ha_entities = await self.ha.entities() if ha_ok else []
-        glances_data = await self.glances.summary() if self.glances else {}
 
         if not hosts:
             hosts = [read_local_host(settings)]
@@ -140,14 +174,19 @@ class Collector:
         snapshot.alerts = await recent_alerts(limit=40, time_range="6h")
 
         # Best-effort mirrors — never fail the tick.
-        try:
-            await self.ha.publish_snapshot(snapshot)
-        except Exception:
-            log.debug("HA publish failed", exc_info=True)
-        try:
-            self.mqtt.publish_snapshot(snapshot)
-        except Exception:
-            log.debug("MQTT publish failed", exc_info=True)
+        async def _mirror_ha():
+            try:
+                await self.ha.publish_snapshot(snapshot)
+            except Exception:
+                log.debug("HA publish failed", exc_info=True)
+
+        async def _mirror_mqtt():
+            try:
+                self.mqtt.publish_snapshot(snapshot)
+            except Exception:
+                log.debug("MQTT publish failed", exc_info=True)
+
+        await asyncio.gather(_mirror_ha(), _mirror_mqtt())
 
         return snapshot
 

@@ -27,6 +27,7 @@ from app.schemas import (
     ContainerFileWriteRequest,
     HealthOut,
     RestartRequest,
+    SettingsUpdate,
     Snapshot,
 )
 from app.security import require_api_token, require_read, require_session
@@ -45,17 +46,17 @@ def _collector_started(app) -> float:
 @router.get("/health", response_model=HealthOut)
 async def health_check(request: Request) -> HealthOut:
     settings = get_settings()
-    hub = getattr(request.app.state, "hub", None)
-    snap: Snapshot | None = getattr(hub, "latest", None) if hub else None
+    app = request.app
+    docker_ready = await app.state.docker.ready()
     return HealthOut(
         status="ok",
         version=__version__,
         instance=settings.instance_name,
-        prometheus=bool(snap.prometheus_ok) if snap else False,
-        docker=bool(snap.docker_ok) if snap else False,
-        homeassistant=bool(snap.ha_ok) if snap else False,
-        mqtt=bool(snap.mqtt_ok) if snap else False,
-        uptime_seconds=time.time() - _collector_started(request.app),
+        prometheus=await app.state.prom.ready(),
+        docker=docker_ready,
+        homeassistant=await app.state.ha.ready(),
+        mqtt=app.state.mqtt.ok,
+        uptime_seconds=max(0.0, time.time() - _collector_started(app)),
     )
 
 
@@ -66,7 +67,7 @@ async def snapshot(
 ) -> Snapshot:
     snap = request.app.state.hub.latest
     if snap is None:
-        raise HTTPException(status_code=503, detail="Collector has not published a snapshot yet")
+        raise HTTPException(status_code=503, detail="Collector warmup in progress")
     return snap
 
 
@@ -77,15 +78,15 @@ async def glances_summary(
 ):
     data = await request.app.state.glances.summary()
     if not data:
-        raise HTTPException(status_code=503, detail="Glances is not configured or unreachable")
+        raise HTTPException(status_code=503, detail="Glances is unreachable or disabled")
     return {"ok": True, "data": data}
 
 
 @router.get("/alerts")
 async def list_alerts(
     _: Annotated[None, Depends(require_read)],
-    range: str = Query(default="24h"),
     limit: int = Query(default=80, ge=1, le=500),
+    range: str = Query(default="24h"),
 ):
     return await recent_alerts(limit=limit, time_range=range)
 
@@ -96,10 +97,10 @@ async def ack_alert(
     _: Annotated[None, Depends(require_api_token)],
 ):
     async with async_session() as session:
-        row = await session.get(Alert, alert_id)
-        if not row:
+        alert = await session.get(Alert, alert_id)
+        if not alert:
             raise HTTPException(status_code=404, detail="Alert not found")
-        row.acked = True
+        alert.acked = True
         await session.commit()
     return {"ok": True, "id": alert_id}
 
@@ -113,7 +114,7 @@ async def list_restarts(
     return [
         {
             "id": r.id,
-            "created_at": r.created_at,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
             "container": r.container,
             "reason": r.reason,
             "automatic": r.automatic,
@@ -125,14 +126,13 @@ async def list_restarts(
 
 
 _SECRET_SETTING_KEYS = {
+    "auth_password",
+    "secret_key",
+    "api_token",
     "telegram_bot_token",
-    "telegram_chat_id",
     "whatsapp_apikey",
     "ha_token",
     "mqtt_password",
-    "auth_password",
-    "api_token",
-    "secret_key",
     "n8n_chat_auth_header",
 }
 
@@ -169,10 +169,12 @@ async def exec_container(
     request: Request,
     body: ContainerExecRequest,
     _: Annotated[None, Depends(require_api_token)],
+    force: bool = False,
 ):
-    ok, detail = await request.app.state.docker.exec(name, body.command)
+    ok, detail = await request.app.state.docker.exec(name, body.command, force=force)
     if not ok:
-        raise HTTPException(status_code=400, detail=detail)
+        status_code = 403 if "denylist" in str(detail) or "prohibited" in str(detail) else 400
+        raise HTTPException(status_code=status_code, detail=detail)
     result = detail
     return ContainerExecOut(
         ok=True,
@@ -189,10 +191,12 @@ async def read_container_file(
     body: ContainerFileReadRequest,
     request: Request,
     _: Annotated[None, Depends(require_api_token)],
+    force: bool = False,
 ):
-    ok, content = await request.app.state.docker.get_file(name, body.path)
+    ok, content = await request.app.state.docker.get_file(name, body.path, force=force)
     if not ok:
-        raise HTTPException(status_code=400, detail=content)
+        status_code = 403 if "denylist" in str(content) or "restricted" in str(content) or "prohibited" in str(content) else 400
+        raise HTTPException(status_code=status_code, detail=content)
     return {"ok": True, "container": name, "path": body.path, "content": content}
 
 
@@ -202,10 +206,12 @@ async def write_container_file(
     body: ContainerFileWriteRequest,
     request: Request,
     _: Annotated[None, Depends(require_api_token)],
+    force: bool = False,
 ):
-    ok, detail = await request.app.state.docker.put_file(name, body.path, body.content)
+    ok, detail = await request.app.state.docker.put_file(name, body.path, body.content, force=force)
     if not ok:
-        raise HTTPException(status_code=400, detail=detail)
+        status_code = 403 if "denylist" in str(detail) or "restricted" in str(detail) or "prohibited" in str(detail) else 400
+        raise HTTPException(status_code=status_code, detail=detail)
     return {"ok": True, "container": name, "path": body.path}
 
 
@@ -219,6 +225,19 @@ async def get_settings_public(
         if key in data and data[key]:
             data[key] = "***"
     return {k: data[k] for k in settings_store.WRITABLE if k in data}
+
+
+@router.patch("/settings")
+async def update_settings(
+    body: SettingsUpdate,
+    _: Annotated[None, Depends(require_api_token)],
+):
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    try:
+        await settings_store.save_overrides(updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True, "updated": list(updates.keys())}
 
 
 async def _mutate_container(request: Request, name: str, action: str, reason: str, force: bool) -> dict:
@@ -324,6 +343,7 @@ async def n8n_chat_proxy(
         body=body,
         content_type=request.headers.get("content-type"),
     )
+
 
 @router.post("/chat/test")
 async def n8n_chat_test(

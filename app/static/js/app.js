@@ -12,6 +12,18 @@
     return document.getElementById(id);
   }
 
+  function csrfHeaders(headers) {
+    const h = Object.assign({}, headers || {});
+    const token =
+      (RW && RW.csrfToken) ||
+      (document.querySelector("meta[name=\"csrf-token\"]") &&
+        document.querySelector("meta[name=\"csrf-token\"]").content);
+    if (token) {
+      h["X-CSRF-Token"] = token;
+    }
+    return h;
+  }
+
   function t(key, vars) {
     let text = (RW.i18n && RW.i18n[key]) || key;
     if (vars) {
@@ -447,7 +459,7 @@ ${esc(net.map(n => `${n.interface_name || n.key || "?"}: ↓ ${n.bytes_recv_rate
           body.set("channel", btn.getAttribute("data-test-channel") || "all");
           const res = await fetch("/alerts/test", {
             method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            headers: csrfHeaders({ "Content-Type": "application/x-www-form-urlencoded" }),
             body,
           });
           if (res.ok) {
@@ -492,7 +504,7 @@ ${esc(net.map(n => `${n.interface_name || n.key || "?"}: ↓ ${n.bytes_recv_rate
       try {
         await fetch("/prefs", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: csrfHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ theme: next }),
         });
       } catch (_) {
@@ -588,7 +600,7 @@ ${esc(net.map(n => `${n.interface_name || n.key || "?"}: ↓ ${n.bytes_recv_rate
         const row = document.querySelector(`[data-name="${CSS.escape(name)}"]`);
         if (row) row.classList.add("is-warning");
         try {
-          const res = await fetch(`/services/${encodeURIComponent(name)}/restart`, { method: "POST" });
+          const res = await fetch(`/services/${encodeURIComponent(name)}/restart`, { method: "POST", headers: csrfHeaders() });
           const root = $("toast-root");
           if (root && res.ok) {
             root.innerHTML = await res.text();
@@ -635,7 +647,7 @@ ${esc(net.map(n => `${n.interface_name || n.key || "?"}: ↓ ${n.bytes_recv_rate
       if (!container || !command.value.trim()) return;
       run.disabled = true;
       try {
-        const res = await fetch(`/services/${encodeURIComponent(container)}/exec`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: command.value.trim() }) });
+        const res = await fetch(`/services/${encodeURIComponent(container)}/exec`, { method: "POST", headers: csrfHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ command: command.value.trim() }) });
         const data = await res.json().catch(() => ({}));
         output.textContent = res.ok ? `exit ${data.exit_code}\n${data.output || ""}` : (data.detail || String(res.status));
       } catch (err) { output.textContent = String(err); }

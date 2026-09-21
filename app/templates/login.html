@@ -13,6 +13,7 @@
     {% endif %}
 
     <form method="post" action="/login" class="rw-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="next" value="{{ next }}">
       <label>
         {{ t('login.user') }}

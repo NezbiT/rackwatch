@@ -133,6 +133,10 @@ class Settings(BaseSettings):
     mqtt_ha_discovery_prefix: str = Field(
         default="homeassistant", validation_alias="MQTT_HA_DISCOVERY_PREFIX"
     )
+    mqtt_tls: bool = Field(default=False, validation_alias="MQTT_TLS")
+
+    # SQLite data retention policy (in days)
+    db_retention_days: int = Field(default=30, validation_alias="RACKWATCH_RETENTION_DAYS")
 
     # Relative path works on Windows and Linux. Compose overrides to /data/.
     database_url: str = Field(
@@ -145,6 +149,11 @@ class Settings(BaseSettings):
     def _refresh_floor(cls, value: int) -> int:
         # Sub-second loops melt Prometheus. 3s is the product default.
         return max(1, value)
+
+    @field_validator("db_retention_days")
+    @classmethod
+    def _retention_bounds(cls, value: int) -> int:
+        return max(1, min(int(value), 3650))
 
     @property
     def auth_enabled(self) -> bool:
