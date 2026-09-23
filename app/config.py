@@ -115,6 +115,10 @@ class Settings(BaseSettings):
     n8n_chat_webhook_url: str = Field(default="", validation_alias="N8N_CHAT_WEBHOOK_URL")
     n8n_chat_auth_header: str = Field(default="", validation_alias="N8N_CHAT_AUTH_HEADER")
     generic_webhook_url: str = Field(default="", validation_alias="GENERIC_WEBHOOK_URL")
+    # Structured triage (TypeSafe Jev). Not a chat model: it returns a cause
+    # and a safe action; RackWatch writes the message.
+    typesafe_api_key: str = Field(default="", validation_alias="TYPESAFE_API_KEY")
+    typesafe_model: str = Field(default="jev-latest", validation_alias="TYPESAFE_MODEL")
     alert_cooldown_seconds: int = Field(default=900, validation_alias="ALERT_COOLDOWN_SECONDS")
     alert_min_severity: Severity = Field(default="warning", validation_alias="ALERT_MIN_SEVERITY")
 

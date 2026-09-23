@@ -33,6 +33,13 @@ from app.schemas import (
 from app.security import has_session, require_api_token, require_read, require_session
 from app.services import settings_store
 from app.services.alerter import recent_alerts
+from app.services.jev_triage import (
+    IntentIn,
+    TriageError,
+    TriageIn,
+    run_intent,
+    run_triage,
+)
 from app.services.restarter import recent_restarts
 
 router = APIRouter(prefix="/api/v1", tags=["api"])
@@ -145,6 +152,7 @@ _SECRET_SETTING_KEYS = {
     "whatsapp_apikey",
     "mqtt_password",
     "n8n_chat_auth_header",
+    "typesafe_api_key",
 }
 
 
@@ -313,6 +321,46 @@ async def stop_container(
     return await _mutate_container(
         request, name, "stop", body.reason if body else "manual", force
     )
+
+
+@router.post("/triage")
+async def triage_alert(
+    request: Request,
+    body: TriageIn,
+    _: Annotated[None, Depends(require_api_token)],
+):
+    """Judge an alert with Jev and return a message written by this app."""
+    settings = get_settings()
+    snap = request.app.state.hub.latest
+    try:
+        return await run_triage(
+            settings.typesafe_api_key,
+            settings.typesafe_model,
+            body,
+            snap,
+        )
+    except TriageError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@router.post("/triage/intent")
+async def triage_intent(
+    request: Request,
+    body: IntentIn,
+    _: Annotated[None, Depends(require_api_token)],
+):
+    """Route a homelab question to a fixed RackWatch read. No generated reply."""
+    settings = get_settings()
+    snap = request.app.state.hub.latest
+    try:
+        return await run_intent(
+            settings.typesafe_api_key,
+            settings.typesafe_model,
+            body,
+            snap,
+        )
+    except TriageError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 @router.post("/alerts/test")
