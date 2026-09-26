@@ -120,7 +120,7 @@ Hace falta **Python 3.12** (3.14 no sirve con las dependencias actuales):
 # una vez
 mise install python@3.12   # o cualquier Python 3.12
 python3.12 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install --require-hashes --no-deps -r requirements.txt
 
 # cada vez
 ./scripts/run-local.sh

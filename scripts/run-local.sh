@@ -8,7 +8,7 @@ cd "$ROOT"
 PY="${ROOT}/.venv/bin/python"
 if [[ ! -x "$PY" ]]; then
   echo "Missing .venv. Create it with Python 3.12:"
-  echo "  python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+  echo "  python3.12 -m venv .venv && .venv/bin/pip install --require-hashes --no-deps -r requirements.txt"
   exit 1
 fi
 

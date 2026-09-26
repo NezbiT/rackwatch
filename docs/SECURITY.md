@@ -72,7 +72,7 @@ Rotate the token by changing `.env` and recreating the container. Old automation
 
 ## Supply chain
 
-Images are pinned by tag in `docker-compose.yml`. Python deps are pinned in `requirements.txt`. Review both before a SaaS deploy. There is no phone-home and no third-party analytics in the app.
+Images are pinned by registry digest in `docker-compose.yml` and the Dockerfile base image. Python deps are hash-locked in `requirements.txt`. Review both before a SaaS deploy. There is no phone-home and no third-party analytics in the app.
 
 ---
 
